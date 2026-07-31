@@ -28,29 +28,77 @@ pub trait Sink: Send + Sync + 'static {
     fn exit(&self, id: u32);
 }
 
+/// Wrap a string so PowerShell reads it as one literal argument. Single quotes
+/// suppress every expansion PowerShell would otherwise perform — `$`, backtick,
+/// subexpressions — and a literal quote is written by doubling it.
+///
+/// This matters more than it looks: recipe arguments come from a file on disk,
+/// and a file on disk is exactly the kind of input that should not be able to
+/// become executable PowerShell.
+fn ps_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "''"))
+}
+
 /// What a pane runs. Resolved here rather than in the UI so the frontend never
 /// builds a command line — it names a profile, the backend decides the argv.
-pub fn resolve(profile: &str) -> CommandBuilder {
+///
+/// `args` are extra flags from a recipe, which is how a per-pane policy profile
+/// is expressed: the recipe says `--permission-mode plan`, and this passes it
+/// through. AgentSwarm never invents a permission flag of its own — whatever the
+/// pane is allowed to do, the user wrote down.
+pub fn resolve(profile: &str, args: &[String]) -> CommandBuilder {
     match profile {
         "claude" => {
             // Claude Code inside PowerShell so the session survives the agent exiting.
+            let mut line = String::from("claude");
+            for a in args {
+                line.push(' ');
+                line.push_str(&ps_quote(a));
+            }
             let mut c = CommandBuilder::new("powershell.exe");
-            c.args(["-NoLogo", "-NoExit", "-Command", "claude"]);
+            c.args(["-NoLogo", "-NoExit", "-Command", &line]);
             c
         }
-        "wsl" => CommandBuilder::new("wsl.exe"),
-        "cmd" => CommandBuilder::new("cmd.exe"),
+        "wsl" => {
+            let mut c = CommandBuilder::new("wsl.exe");
+            c.args(args);
+            c
+        }
+        "cmd" => {
+            let mut c = CommandBuilder::new("cmd.exe");
+            c.args(args);
+            c
+        }
         "pwsh" => {
             let mut c = CommandBuilder::new("pwsh.exe");
             c.args(["-NoLogo"]);
+            c.args(args);
             c
         }
         // powershell is the safe default: present on every Windows box
         _ => {
             let mut c = CommandBuilder::new("powershell.exe");
             c.args(["-NoLogo"]);
+            c.args(args);
             c
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ps_quote;
+
+    #[test]
+    fn quoting_neutralises_powershell() {
+        assert_eq!(ps_quote("plan"), "'plan'");
+        // a quote is escaped by doubling, so the string cannot be closed early
+        assert_eq!(ps_quote("it's"), "'it''s'");
+        // the classic break-out attempt stays inert text
+        assert_eq!(ps_quote("'; rm -rf /; '"), "'''; rm -rf /; '''");
+        // PowerShell expands none of these inside single quotes
+        assert_eq!(ps_quote("$(whoami)"), "'$(whoami)'");
+        assert_eq!(ps_quote("$env:PATH"), "'$env:PATH'");
     }
 }
 
@@ -60,6 +108,7 @@ pub fn spawn<S: Sink>(
     id: u32,
     profile: &str,
     cwd: Option<String>,
+    args: &[String],
     cols: u16,
     rows: u16,
 ) -> anyhow::Result<()> {
@@ -70,7 +119,7 @@ pub fn spawn<S: Sink>(
         pixel_height: 0,
     })?;
 
-    let mut cmd = resolve(profile);
+    let mut cmd = resolve(profile, args);
     if let Some(dir) = cwd {
         if std::path::Path::new(&dir).is_dir() {
             cmd.cwd(dir);

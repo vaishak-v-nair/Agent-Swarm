@@ -4,6 +4,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { paneState, fmt } from './state.js';
+import { score, insertOrdered } from './order.js';
 import '@xterm/xterm/css/xterm.css';
 
 addEventListener('error', e => diag('window error: ' + e.message + ' @' + e.filename + ':' + e.lineno));
@@ -74,19 +75,25 @@ function refit(p) {
 const diag = msg => { invoke('diag', { msg: String(msg) }).catch(() => {}); };
 
 /* ── panes ─────────────────────────────────────────────────────────────── */
-async function newPane(profile = 'powershell') {
+async function newPane(profile = 'powershell', opts = {}) {
   const id = nextId++;
+  const label = opts.label || null;
+  const paneCwd = opts.cwd || workdir;
+  const args = opts.args || [];
 
   const el = document.createElement('div');
   el.className = 'pane';
   el.innerHTML =
-    `<div class="head"><span class="dot"></span><span class="name">${profile}</span>` +
+    `<div class="head"><span class="dot"></span><span class="name"></span>` +
     `<span class="id">#${id}</span>` +
     `<span class="state">starting</span>` +
     `<span class="mode" title="raw output ⇄ plain english (ctrl+shift+E)">raw</span>` +
     `<span class="x" title="close">✕</span></div>` +
     `<div class="term"></div>` +
     `<div class="flow"><div class="flow-status">watching for a session…</div><div class="cards"></div></div>`;
+  // textContent, not template interpolation: a label comes from a recipe file
+  el.querySelector('.name').textContent = label || profile;
+  el.querySelector('.name').title = paneCwd || '';
   grid.appendChild(el);
 
   const term = new Terminal({
@@ -110,7 +117,7 @@ async function newPane(profile = 'powershell') {
     term.loadAddon(webgl);
   } catch { /* no WebGL — xterm falls back on its own */ }
 
-  const p = { id, term, fit, el, profile, alive: true, cols: 0, rows: 0, bytes: 0, born: Date.now(),
+  const p = { id, term, fit, el, profile, label, cwd: paneCwd, args, alive: true, cols: 0, rows: 0, bytes: 0, born: Date.now(),
               dot: el.querySelector('.dot'),
               flow: el.querySelector('.flow'),
               cards: el.querySelector('.cards'),
@@ -157,16 +164,17 @@ async function newPane(profile = 'powershell') {
 
   try {
     await invoke('pty_spawn', {
-      id, profile,
-      cwd: workdir,
+      id, profile, args,
+      cwd: paneCwd,
       cols: p.cols || 80,
       rows: p.rows || 24,
     });
-    diag(`pane ${id} (${profile}) spawned at ${p.cols || 80}x${p.rows || 24}`);
+    diag(`pane ${id} (${label || profile}) spawned at ${p.cols || 80}x${p.rows || 24}` +
+         (args.length ? ` args=${JSON.stringify(args)}` : ''));
     // The semantic layer is strictly additive: if it never attaches, the terminal
     // above is untouched and fully usable.
-    if (profile === 'claude' && workdir) {
-      invoke('sem_attach', { id, cwd: workdir }).catch(e => diag(`sem_attach failed on ${id}: ${e}`));
+    if (profile === 'claude' && paneCwd) {
+      invoke('sem_attach', { id, cwd: paneCwd }).catch(e => diag(`sem_attach failed on ${id}: ${e}`));
     } else {
       p.status.textContent = profile === 'claude'
         ? 'no working folder — nothing to correlate'
@@ -178,6 +186,260 @@ async function newPane(profile = 'powershell') {
     markDead(id);
   }
 }
+
+/* ── M4: everything, in order ──────────────────────────────────────────────
+   The original complaint about the CLI, in the user's words: "it places
+   everything in order which claude CLI lacks."
+
+   Per-pane timelines answer "what is this one doing". They cannot answer "what
+   happened, across all of them, in the order it happened" — and with five
+   sessions running that is the question you actually have. Cards are interleaved
+   by their real transcript timestamp, which is why the card carries an ISO
+   string rather than a pre-formatted clock face: "16:33" cannot be sorted
+   against another session's "16:33".                                          */
+
+const feed = [];            // every card from every pane, in real-time order
+
+function addToFeed(c, p) {
+  c.at = Date.parse(c.iso) || Date.now();   // undated cards sort as "now", not 1970
+  c.label = p.label || p.profile;
+  insertOrdered(feed, c);
+  if (timelineOpen) renderTimeline();
+}
+
+let timelineOpen = false;
+let timelineFilter = null;   // null = every pane
+
+function renderTimeline() {
+  const box = document.getElementById('tl-body');
+  const rows = timelineFilter == null ? feed : feed.filter(c => c.pane === timelineFilter);
+  box.textContent = '';
+  if (!rows.length) {
+    box.innerHTML = '<div class="tl-empty">nothing yet — the timeline fills as sessions work</div>';
+    return;
+  }
+  let lastDay = '';
+  for (const c of rows.slice(-400)) {
+    const d = new Date(c.at);
+    const day = d.toDateString();
+    if (day !== lastDay) {
+      lastDay = day;
+      const h = document.createElement('div');
+      h.className = 'tl-day';
+      h.textContent = day;
+      box.appendChild(h);
+    }
+    const row = document.createElement('div');
+    row.className = `tl-row ${c.kind}`;
+    row.innerHTML =
+      `<span class="tl-time"></span><span class="tl-pane"></span>` +
+      `<span class="tl-what"></span><span class="tl-body"></span>`;
+    row.querySelector('.tl-time').textContent = hhmm(d);
+    row.querySelector('.tl-pane').textContent = `#${c.pane} ${c.label}`;
+    row.querySelector('.tl-what').textContent = `${ICON[c.kind] ?? '·'} ${c.title}`;
+    row.querySelector('.tl-body').textContent = c.body;
+    row.addEventListener('click', () => { closeTimeline(); focus(c.pane); });
+    box.appendChild(row);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+const hhmm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+function openTimeline(paneId = null) {
+  timelineFilter = paneId;
+  timelineOpen = true;
+  const el = document.getElementById('timeline');
+  el.classList.add('open');
+  document.getElementById('tl-scope').textContent =
+    paneId == null ? 'all sessions' : `pane #${paneId} only`;
+  renderTimeline();
+}
+function closeTimeline() {
+  timelineOpen = false;
+  document.getElementById('timeline').classList.remove('open');
+  panes.get(focused)?.term.focus();
+}
+
+/* ── M4: recipes and the command palette ───────────────────────────────────
+   A recipe is the swarm you always open together. The milestone's exit test is
+   "the morning swarm is one command", so the palette is that command: one
+   keystroke, type three letters, enter.
+
+   Saving matters as much as running. You arrange the panes by hand, decide the
+   arrangement was right, and keep it — rather than authoring JSON for a layout
+   you have not tried yet.                                                     */
+
+let recipes = [];
+let profiles = ['powershell'];
+
+async function refreshRecipes() {
+  if (!workdir) { diag('no working folder — recipes not loaded'); return; }
+  try {
+    const got = await invoke('list_recipes', { cwd: workdir });
+    recipes = got.recipes;
+    diag(`${recipes.length} recipe(s): ${recipes.map(r => r.name).join(', ') || 'none'}`);
+    // A recipe file you wrote and the app rejected is exactly when silence is
+    // worst. Say so on screen, not only in a log nobody is tailing.
+    for (const p of got.problems) diag(`recipe problem: ${p}`);
+    if (got.problems.length) flash(`recipe file has ${got.problems.length} problem(s) — ctrl+shift+P`);
+  } catch (e) {
+    diag(`recipes unreadable: ${e}`);
+    flash('could not read recipes');
+  }
+}
+
+async function runRecipe(r) {
+  diag(`swarm "${r.name}": ${r.panes.length} panes`);
+  for (const spec of r.panes) {
+    // Sequential, not Promise.all: each pane waits for layout before it spawns,
+    // and racing them reintroduces the zero-size terminal bug from M1.
+    await newPane(spec.profile, { cwd: spec.cwd, args: spec.args, label: spec.label });
+  }
+}
+
+/** The panes on screen right now, in a form a recipe can be written from. */
+function currentSwarm() {
+  return [...panes.values()].map(p => ({
+    profile: p.profile,
+    cwd: p.cwd || workdir,
+    label: p.label || null,
+    args: p.args || [],
+  }));
+}
+
+async function saveSwarmAs(name) {
+  const panesSpec = currentSwarm();
+  if (!panesSpec.length) { flash('nothing open to save'); return; }
+  try {
+    const path = await invoke('save_recipe', {
+      cwd: workdir,
+      recipe: { name, description: null, panes: panesSpec },
+    });
+    await refreshRecipes();
+    flash(`saved "${name}" — ${panesSpec.length} panes`);
+    diag(`recipe "${name}" saved to ${path}`);
+  } catch (e) {
+    flash(`could not save: ${e}`);
+    diag(`save_recipe failed: ${e}`);
+  }
+}
+
+/** A short message in the bar. Errors belong on screen, not only in a log. */
+let flashTimer;
+function flash(msg) {
+  const el = document.getElementById('flash');
+  el.textContent = msg;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { el.textContent = ''; }, 4000);
+}
+
+function actions() {
+  const list = [];
+  for (const r of recipes) {
+    list.push({ text: `swarm  ${r.name}`, hint: r.description || `${r.panes.length} panes`, run: () => runRecipe(r) });
+  }
+  for (const name of profiles) {
+    list.push({ text: `new pane  ${name}`, hint: name === defaultProfile ? 'ctrl+shift+T' : '', run: () => newPane(name) });
+  }
+  list.push({ text: 'save this swarm as a recipe', hint: `${panes.size} panes open`, ask: 'name for this swarm', run: saveSwarmAs });
+  list.push({ text: 'timeline  all sessions in order', hint: 'ctrl+shift+M', run: () => openTimeline() });
+  if (focused) list.push({ text: `timeline  pane #${focused} only`, run: () => openTimeline(focused) });
+  list.push({ text: 'jump to what needs me', hint: 'ctrl+shift+space', run: jumpToNeedy });
+  list.push({ text: 'plain english  this pane', hint: 'ctrl+shift+E', run: () => { const p = panes.get(focused); if (p) setMode(p, !p.sem); } });
+  list.push({ text: 'plain english  every pane', hint: 'ctrl+shift+A', run: toggleAllModes });
+  list.push({ text: 'zoom this pane', hint: 'ctrl+shift+Z', run: toggleZoom });
+  if (focused) list.push({ text: `close pane #${focused}`, hint: 'ctrl+shift+W', run: () => closePane(focused) });
+  return list;
+}
+
+let paletteOpen = false, paletteSel = 0, paletteRows = [], asking = null;
+
+function openPalette() {
+  paletteOpen = true;
+  asking = null;
+  paletteSel = 0;
+  const el = document.getElementById('palette');
+  el.classList.add('open');
+  const input = document.getElementById('pal-input');
+  input.value = '';
+  input.placeholder = 'run a swarm, open a pane, find anything…';
+  filterPalette();
+  input.focus();
+}
+
+function closePalette() {
+  paletteOpen = false;
+  asking = null;
+  document.getElementById('palette').classList.remove('open');
+  if (!timelineOpen) panes.get(focused)?.term.focus();
+}
+
+function filterPalette() {
+  const q = document.getElementById('pal-input').value.trim();
+  const box = document.getElementById('pal-list');
+  box.textContent = '';
+
+  if (asking) {                    // capturing a name, not choosing an action
+    box.innerHTML = `<div class="pal-ask">${asking.hint}</div>`;
+    paletteRows = [];
+    return;
+  }
+
+  paletteRows = actions()
+    .map(a => ({ a, s: score(a.text, q) }))
+    .filter(r => Number.isFinite(r.s))
+    .sort((x, y) => y.s - x.s)
+    .map(r => r.a);
+
+  if (paletteSel >= paletteRows.length) paletteSel = Math.max(0, paletteRows.length - 1);
+
+  paletteRows.forEach((a, i) => {
+    const d = document.createElement('div');
+    d.className = 'pal-row' + (i === paletteSel ? ' sel' : '');
+    const t = document.createElement('span'); t.className = 'pal-text'; t.textContent = a.text;
+    const h = document.createElement('span'); h.className = 'pal-hint'; h.textContent = a.hint || '';
+    d.append(t, h);
+    d.addEventListener('mousedown', e => { e.preventDefault(); paletteSel = i; runPaletteSelection(); });
+    box.appendChild(d);
+  });
+}
+
+function runPaletteSelection() {
+  const input = document.getElementById('pal-input');
+
+  if (asking) {                    // second step: the name was typed
+    const value = input.value.trim();
+    if (!value) return;
+    const fn = asking.run;
+    closePalette();
+    fn(value);
+    return;
+  }
+
+  const a = paletteRows[paletteSel];
+  if (!a) return;
+  if (a.ask) {                     // this action needs a word from you first
+    asking = { hint: a.ask, run: a.run };
+    input.value = '';
+    input.placeholder = a.ask;
+    filterPalette();
+    return;
+  }
+  closePalette();
+  a.run();
+}
+
+function movePalette(d) {
+  if (!paletteRows.length) return;
+  paletteSel = (paletteSel + d + paletteRows.length) % paletteRows.length;
+  filterPalette();
+}
+
+const toggleAllModes = () => {
+  const on = ![...panes.values()].every(p => p.sem);
+  panes.forEach(p => setMode(p, on));
+};
 
 /* ── M3: what is happening right now ───────────────────────────────────────
    M2 answered "what happened". This answers "does this need me", which is the
@@ -300,6 +562,8 @@ function addCard(c) {
 
   // An empty result closes its call and says nothing worth a row in the timeline.
   if (c.kind === 'result' && !c.body) return;
+
+  addToFeed(c, p);
 
   p.status.style.display = 'none';
 
@@ -432,7 +696,32 @@ setInterval(() => {
   });
 }, 1000);
 
+/* Overlay wiring. The palette owns its own keys while it is open, so arrows and
+   enter mean "choose" rather than reaching the terminal underneath. */
+{
+  const input = document.getElementById('pal-input');
+  input.addEventListener('input', () => { paletteSel = 0; filterPalette(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); movePalette(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); movePalette(-1); }
+    else if (e.key === 'Enter') { e.preventDefault(); runPaletteSelection(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+    e.stopPropagation();
+  });
+  document.getElementById('palette').addEventListener('mousedown', e => {
+    if (e.target.id === 'palette') closePalette();   // clicking outside dismisses
+  });
+  document.querySelector('.tl-close').addEventListener('click', closeTimeline);
+  document.getElementById('timeline').addEventListener('mousedown', e => {
+    if (e.target.id === 'timeline') closeTimeline();
+  });
+}
+
 addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (paletteOpen) { e.preventDefault(); closePalette(); return; }
+    if (timelineOpen) { e.preventDefault(); closeTimeline(); return; }
+  }
   if (!(e.ctrlKey && e.shiftKey)) return;
   const k = e.key.toLowerCase();
   const hit = () => { e.preventDefault(); e.stopPropagation(); };
@@ -441,6 +730,8 @@ addEventListener('keydown', e => {
   else if (k === 'z') { hit(); toggleZoom(); }
   else if (k === 'e') { hit(); const p = panes.get(focused); if (p) setMode(p, !p.sem); }
   else if (e.key === ' ') { hit(); jumpToNeedy(); }
+  else if (k === 'p') { hit(); paletteOpen ? closePalette() : openPalette(); }
+  else if (k === 'm') { hit(); timelineOpen ? closeTimeline() : openTimeline(); }
   // Flip the whole cockpit at once — the "what is everyone doing" view.
   else if (k === 'a') { hit(); const on = ![...panes.values()].every(p => p.sem); panes.forEach(p => setMode(p, on)); }
   else if (e.key === 'ArrowRight') { hit(); cycle(1); }
@@ -458,10 +749,10 @@ let defaultProfile = 'powershell';
 let workdir = null;
 
 (async () => {
-  let profiles = ['powershell'];
   try { profiles = await invoke('available_profiles'); } catch { /* keep the default */ }
   if (profiles.includes('claude')) defaultProfile = 'claude';
   try { workdir = await invoke('default_cwd'); } catch { /* panes inherit instead */ }
+  await refreshRecipes();
 
   const bar = document.getElementById('profiles');
   for (const name of profiles) {
@@ -472,5 +763,17 @@ let workdir = null;
   }
 
   relayout();
+
+  // `agentswarm --swarm morning` opens the whole arrangement and nothing else.
+  // A named swarm that does not exist must say so — starting a lone default pane
+  // as if nothing were asked for is how a typo turns into a confusing morning.
+  let wanted = null;
+  try { wanted = await invoke('startup_swarm'); } catch { /* no flag, no problem */ }
+  if (wanted) {
+    const r = recipes.find(x => x.name === wanted);
+    if (r) { await runRecipe(r); return; }
+    flash(`no recipe named "${wanted}"`);
+    diag(`--swarm "${wanted}" not found; opening a default pane instead`);
+  }
   newPane(defaultProfile);
 })();

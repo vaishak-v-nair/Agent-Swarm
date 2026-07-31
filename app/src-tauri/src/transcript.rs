@@ -23,7 +23,10 @@ pub struct Card {
     pub kind: String,   // "you" | "claude" | "tool" | "result"
     pub title: String,
     pub body: String,
-    pub ts: String,
+    /// The raw ISO timestamp, not a pre-formatted clock face. The merged
+    /// timeline interleaves panes by real time, and "16:33" cannot be ordered
+    /// against another session's "16:33". Display formatting is the UI's job.
+    pub iso: String,
     /// The tool_use id, carried by both the call and its result. This is what
     /// lets the UI know a tool is still outstanding — and an outstanding tool
     /// with a quiet terminal is a permission prompt nobody has noticed.
@@ -134,11 +137,11 @@ pub fn parse_line(pane: u32, line: &str) -> Vec<Card> {
     if v.get("isSidechain").and_then(|b| b.as_bool()).unwrap_or(false) {
         return out;
     }
-    let ts = v
+    let iso = v
         .get("timestamp")
         .and_then(|t| t.as_str())
-        .map(|t| t.get(11..16).unwrap_or("").to_string())
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .to_string();
     let Some(msg) = v.get("message") else { return out };
     let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
     let Some(content) = msg.get("content") else { return out };
@@ -148,7 +151,7 @@ pub fn parse_line(pane: u32, line: &str) -> Vec<Card> {
         kind: kind.into(),
         title: title.into(),
         body,
-        ts: ts.clone(),
+        iso: iso.clone(),
         id: id.into(),
     };
 
@@ -253,7 +256,7 @@ mod tests {
         let c = one(r#"{"timestamp":"2026-07-31T09:41:02Z","message":{"role":"user","content":"build the thing"}}"#);
         assert_eq!(c.kind, "you");
         assert_eq!(c.body, "build the thing");
-        assert_eq!(c.ts, "09:41");
+        assert_eq!(c.iso, "2026-07-31T09:41:02Z");
         assert_eq!(c.pane, 1);
     }
 

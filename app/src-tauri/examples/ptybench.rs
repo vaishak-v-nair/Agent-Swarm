@@ -49,7 +49,7 @@ fn main() -> anyhow::Result<()> {
     let panes = Arc::new(Panes::default());
 
     // ---- baseline: one idle pane, no flood anywhere -------------------------
-    pty::spawn(sink.clone(), panes.clone(), 0, "cmd", None, 120, 40)?;
+    pty::spawn(sink.clone(), panes.clone(), 0, "cmd", None, &[], 120, 40)?;
     std::thread::sleep(Duration::from_millis(700));
 
     let mut idle = Vec::new();
@@ -64,7 +64,7 @@ fn main() -> anyhow::Result<()> {
 
     // ---- load: every pane floods, continuously ------------------------------
     for id in 1..n {
-        pty::spawn(sink.clone(), panes.clone(), id, "cmd", None, 120, 40)?;
+        pty::spawn(sink.clone(), panes.clone(), id, "cmd", None, &[], 120, 40)?;
     }
     std::thread::sleep(Duration::from_millis(900));
 

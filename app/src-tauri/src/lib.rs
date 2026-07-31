@@ -1,4 +1,5 @@
 pub mod pty;
+pub mod recipes;
 pub mod transcript;
 
 use pty::{Panes, Sink};
@@ -54,6 +55,7 @@ fn pty_spawn(
     id: u32,
     profile: String,
     cwd: Option<String>,
+    args: Option<Vec<String>>,
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
@@ -63,10 +65,43 @@ fn pty_spawn(
         id,
         &profile,
         cwd,
+        &args.unwrap_or_default(),
         cols,
         rows,
     )
     .map_err(|e| e.to_string())
+}
+
+/// M4. The named swarms available from this folder.
+#[tauri::command]
+fn list_recipes(cwd: String) -> recipes::Loaded {
+    recipes::load(&cwd)
+}
+
+/// A swarm named on the command line: `agentswarm --swarm morning`.
+///
+/// The milestone's exit test is "the morning swarm is one command", and this is
+/// what makes that sentence literally true rather than nearly true — a shortcut
+/// or a shell alias opens the whole arrangement, with no keystrokes after it.
+#[tauri::command]
+fn startup_swarm() -> Option<String> {
+    let mut args = std::env::args().skip(1);
+    while let Some(a) = args.next() {
+        if a == "--swarm" {
+            return args.next();
+        }
+        if let Some(v) = a.strip_prefix("--swarm=") {
+            return Some(v.to_string());
+        }
+    }
+    None
+}
+
+/// Keep the swarm currently on screen, under a name. Arranging panes by hand and
+/// then saving beats authoring JSON for a layout you have not tried yet.
+#[tauri::command]
+fn save_recipe(cwd: String, recipe: recipes::Recipe) -> Result<String, String> {
+    recipes::save(&cwd, recipe).map(|p| p.to_string_lossy().to_string())
 }
 
 /// M2. Attach the semantic layer to a pane: watch the Claude Code transcript for
@@ -183,6 +218,9 @@ pub fn run() {
             available_profiles,
             sem_attach,
             default_cwd,
+            list_recipes,
+            save_recipe,
+            startup_swarm,
             set_attention,
             diag
         ])

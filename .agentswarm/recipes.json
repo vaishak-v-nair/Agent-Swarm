@@ -1,0 +1,24 @@
+{
+  "recipes": [
+    {
+      "name": "morning",
+      "description": "the daily two",
+      "panes": [
+        { "profile": "claude", "cwd": "E:\\agent-swarm", "label": "swarm" },
+        { "profile": "powershell", "cwd": "E:\\agent-swarm", "label": "shell" }
+      ]
+    },
+    {
+      "name": "review",
+      "description": "a reviewer that cannot edit",
+      "panes": [
+        {
+          "profile": "claude",
+          "cwd": "E:\\agent-swarm",
+          "label": "reviewer",
+          "args": ["--permission-mode", "plan"]
+        }
+      ]
+    }
+  ]
+}

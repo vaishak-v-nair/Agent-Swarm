@@ -10,10 +10,34 @@
       <span class="brand">AgentSwarm</span>
       <span id="profiles"></span>
       <span id="tally"></span>
+      <span id="flash"></span>
       <span class="spacer"></span>
-      <span id="hint">ctrl+shift+ &nbsp;T new &nbsp;·&nbsp; W close &nbsp;·&nbsp; Z zoom &nbsp;·&nbsp; E english &nbsp;·&nbsp; A all &nbsp;·&nbsp; <b>space → what needs me</b></span>
+      <span id="hint"><b>ctrl+shift+P</b> everything &nbsp;·&nbsp; M timeline &nbsp;·&nbsp; space → what needs me</span>
     </header>
     <main id="grid"></main>
+
+    <!-- M4: one keystroke to everything. Recipes, panes, views, all findable
+         by typing rather than by remembering another chord. -->
+    <div id="palette">
+      <div class="pal-box">
+        <input id="pal-input" autocomplete="off" spellcheck="false">
+        <div id="pal-list"></div>
+      </div>
+    </div>
+
+    <!-- M4: the merged timeline — every session, in the order it happened.
+         "It places everything in order which claude CLI lacks." -->
+    <div id="timeline">
+      <div class="tl-box">
+        <div class="tl-head">
+          <span class="tl-title">timeline</span>
+          <span id="tl-scope"></span>
+          <span class="spacer"></span>
+          <span class="tl-close" title="close (esc)">✕</span>
+        </div>
+        <div id="tl-body"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

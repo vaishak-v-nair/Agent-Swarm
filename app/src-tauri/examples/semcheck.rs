@@ -89,7 +89,7 @@ fn main() {
             let n = s.fetch_add(1, Ordering::Relaxed) + 1;
             if n <= 8 {
                 let b: String = c.body.chars().take(72).collect();
-                println!("  [{}] {:<8} {}", c.ts, c.kind, b);
+                println!("  [{}] {:<8} {}", c.iso.get(11..16).unwrap_or(""), c.kind, b);
             }
         },
         |st, own| println!("  status: {st} (own session: {own})"),
