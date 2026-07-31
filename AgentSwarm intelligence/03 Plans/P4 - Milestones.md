@@ -6,12 +6,12 @@ tags: [build]
 
 Construction sequence — every milestone ships the same product, more finished. No evidence gates; we build.
 
-## M1 — It's a terminal (~2–3 CC days)
+## M1 — It's a terminal ✅ BUILT 2026-07-31
 - [ ] `git init` E:\agent-swarm, Tauri 2 scaffold
 - [ ] Pane manager (split/close/zoom)
 - [ ] ConPTY integration; launch Claude Code + plain shells (Windows + WSL)
 - [ ] xterm.js WebGL rendering; input latency decoupled from output
-- [ ] **Exit test:** it's my daily driver and I don't switch back
+- [ ] **Exit test:** it is my daily driver and I do not switch back — *pending: needs a week of real use.* Build log: [[B1 - M1 The Terminal]]
 
 ## M2 — It understands (~3–4 CC days)
 - [ ] Transcript watcher + session⇄pane correlation

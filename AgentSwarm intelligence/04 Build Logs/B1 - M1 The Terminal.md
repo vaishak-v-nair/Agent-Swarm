@@ -39,9 +39,11 @@ A native Windows app: `app/src-tauri/target/release/agentswarm.exe`.
 | Check | Result |
 |---|---|
 | Frontend build | ✅ 397 KB, 100 KB gzipped, 1.6 s |
-| Rust build | ✅ 4 m 40 s cold, no warnings blocking |
+| Rust build (debug) | ✅ 4 m 40 s cold |
+| Rust build (release) | ✅ 7 m 45 s, LTO + opt-level=s |
 | Launch | ✅ window opens, survives 8 s smoke test |
-| Memory at rest | 35.8 MB working set, one pane |
+| Binary size | **2.9 MB** release (12.0 MB debug) |
+| Memory at rest | **21.9 MB** release, one pane (35.8 MB debug) |
 
 **Not yet verified:** typing latency under heavy agent output, WSL profile end to end, multi-pane behaviour past 4 sessions, and behaviour across sleep/wake. These need a human at the keyboard.
 

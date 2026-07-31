@@ -11,7 +11,7 @@ tags: [index, agentswarm]
 
 Every terminal today treats Claude Code like teletype text from 1978. AgentSwarm is a terminal that knows it is running agents: it renders understanding, automates the repetitive, and stays fast when five sessions are all writing at once.
 
-**Status:** concept locked and reviewed clean (CEO + engineering). **Not built.** Waiting on a five-day evidence week that decides whether it gets the build hours at all.
+**Status:** **M1 is built and runs** (2026-07-31) — a real terminal with tiling panes and live PTY sessions. See [[B1 - M1 The Terminal]]. The evidence week still governs everything above M1.
 
 ## The vault
 
@@ -36,7 +36,7 @@ Every terminal today treats Claude Code like teletype text from 1978. AgentSwarm
 ## What is true today
 
 - **The concept survived a reset.** The review process narrowed it into a small notification utility. That was rejected and the full terminal vision was restored. See [[S2 - The Concept Reset|S2]].
-- **Nothing is built.** Not one line. By design — the evidence week comes first.
+- **M1 exists and launches.** Everything above it — the semantic layer, the cockpit badges — still waits on the evidence week.
 - **Nobody funded is building this.** AgentSwarm's category has no funded competitor, which is unusual and worth moving on.
 - **Stop is a real outcome.** If the evidence week shows the built-in tools already solve the problem, the answer is to write that down and build nothing.
 
