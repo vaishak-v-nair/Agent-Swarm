@@ -37,12 +37,14 @@ fn main() {
                 continue;
             }
             lines += 1;
-            match transcript::parse_line(1, line) {
-                Some(c) => {
-                    cards += 1;
+            let got = transcript::parse_line(1, line);
+            if !got.is_empty() {
+                cards += got.len();
+                for c in got {
                     *by_kind.entry(c.kind).or_default() += 1;
                 }
-                None => {
+            } else {
+                {
                     if misses.len() < 6 {
                         // what a miss actually was, so the gap is diagnosable
                         let v: serde_json::Value = serde_json::from_str(line).unwrap_or_default();
@@ -62,7 +64,7 @@ fn main() {
     println!("static pass over {} transcript file(s)", files.len());
     println!("  lines read   {lines}");
     println!(
-        "  cards built  {cards}  ({:.0}% of lines)",
+        "  cards built  {cards}  ({:.0}% of lines produced at least one)",
         if lines > 0 { cards as f64 / lines as f64 * 100.0 } else { 0.0 }
     );
     for (k, n) in &by_kind {
@@ -90,7 +92,7 @@ fn main() {
                 println!("  [{}] {:<8} {}", c.ts, c.kind, b);
             }
         },
-        |st| println!("  status: {st}"),
+        |st, own| println!("  status: {st} (own session: {own})"),
     );
 
     std::thread::sleep(std::time::Duration::from_secs(secs));

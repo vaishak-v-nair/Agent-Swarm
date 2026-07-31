@@ -24,6 +24,10 @@ pub struct Card {
     pub title: String,
     pub body: String,
     pub ts: String,
+    /// The tool_use id, carried by both the call and its result. This is what
+    /// lets the UI know a tool is still outstanding — and an outstanding tool
+    /// with a quiet terminal is a permission prompt nobody has noticed.
+    pub id: String,
 }
 
 /// Claude Code stores transcripts under a directory named after the cwd with
@@ -117,167 +121,213 @@ fn slash_command(text: &str) -> Option<String> {
     })
 }
 
-/// Turn one transcript line into at most one card. Returns None for anything we
-/// do not understand, which is the honest answer for an undocumented format.
-pub fn parse_line(pane: u32, line: &str) -> Option<Card> {
-    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+/// Turn one transcript line into cards — plural, because one message can hold
+/// several parallel tool calls, and collapsing those to one would make the
+/// outstanding-tool count wrong. An empty result is silent in the timeline but
+/// still returned, because it is what closes an outstanding call.
+///
+/// Anything we do not understand yields nothing, which is the honest answer for
+/// an undocumented format.
+pub fn parse_line(pane: u32, line: &str) -> Vec<Card> {
+    let mut out = Vec::new();
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { return out };
     if v.get("isSidechain").and_then(|b| b.as_bool()).unwrap_or(false) {
-        return None;
+        return out;
     }
     let ts = v
         .get("timestamp")
         .and_then(|t| t.as_str())
         .map(|t| t.get(11..16).unwrap_or("").to_string())
         .unwrap_or_default();
-    let msg = v.get("message")?;
+    let Some(msg) = v.get("message") else { return out };
     let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
-    let content = msg.get("content")?;
+    let Some(content) = msg.get("content") else { return out };
+
+    let card = |kind: &str, title: &str, body: String, id: &str| Card {
+        pane,
+        kind: kind.into(),
+        title: title.into(),
+        body,
+        ts: ts.clone(),
+        id: id.into(),
+    };
 
     // plain string content = a user message
     if let Some(text) = content.as_str() {
         if role != "user" {
-            return None;
+            return out;
         }
         if let Some(cmd) = slash_command(text) {
-            return Some(Card { pane, kind: "you".into(), title: "you".into(), body: cmd, ts });
+            out.push(card("you", "you", cmd, ""));
+        } else if !text.starts_with('<') {
+            // a leading '<' means task-notification, caveat, reminder — machinery
+            out.push(card("you", "you", clip(text, 400), ""));
         }
-        if text.starts_with('<') {
-            return None; // task-notification, caveat, reminder — machinery, not the user
-        }
-        return Some(Card { pane, kind: "you".into(), title: "you".into(), body: clip(text, 400), ts });
+        return out;
     }
 
-    let blocks = content.as_array()?;
+    let Some(blocks) = content.as_array() else { return out };
 
     if role == "user" {
         // tool results arrive wearing the user role; they are machine output
         for b in blocks {
-            if b.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
-                let body = b
-                    .get("content")
-                    .map(|c| match c.as_str() {
-                        Some(s) => s.to_string(),
-                        None => c
-                            .as_array()
-                            .map(|a| {
-                                a.iter()
-                                    .filter_map(|x| x.get("text").and_then(|t| t.as_str()))
-                                    .collect::<Vec<_>>()
-                                    .join(" ")
-                            })
-                            .unwrap_or_default(),
-                    })
-                    .unwrap_or_default();
-                if body.trim().is_empty() {
-                    return None;
-                }
-                return Some(Card { pane, kind: "result".into(), title: "result".into(), body: clip(&body, 240), ts });
+            if b.get("type").and_then(|t| t.as_str()) != Some("tool_result") {
+                continue;
             }
+            let body = b
+                .get("content")
+                .map(|c| match c.as_str() {
+                    Some(s) => s.to_string(),
+                    None => c
+                        .as_array()
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|x| x.get("text").and_then(|t| t.as_str()))
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        })
+                        .unwrap_or_default(),
+                })
+                .unwrap_or_default();
+            let id = b.get("tool_use_id").and_then(|i| i.as_str()).unwrap_or("");
+            out.push(card("result", "result", clip(&body, 240), id));
+        }
+        if !out.is_empty() {
+            return out;
         }
         let text: String = blocks
             .iter()
             .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
             .collect::<Vec<_>>()
             .join(" ");
-        if text.trim().is_empty() || text.starts_with('<') {
-            return None;
+        if !text.trim().is_empty() && !text.starts_with('<') {
+            out.push(card("you", "you", clip(&text, 400), ""));
         }
-        return Some(Card { pane, kind: "you".into(), title: "you".into(), body: clip(&text, 400), ts });
+        return out;
     }
 
     if role == "assistant" {
+        // in order, so the timeline reads the way the turn actually happened:
+        // what it said, then what it did
         for b in blocks {
-            if b.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                let name = b.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
-                let i = b.get("input");
-                let arg = ["command", "file_path", "pattern", "query", "url", "prompt"]
-                    .iter()
-                    .find_map(|k| i.and_then(|i| i.get(*k)).and_then(|x| x.as_str()))
-                    .unwrap_or("");
-                return Some(Card { pane, kind: "tool".into(), title: name.into(), body: clip(arg, 200), ts });
+            match b.get("type").and_then(|t| t.as_str()) {
+                Some("text") => {
+                    let t = b.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                    if !t.trim().is_empty() {
+                        out.push(card("claude", "claude", clip(t, 500), ""));
+                    }
+                }
+                Some("tool_use") => {
+                    let name = b.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                    let i = b.get("input");
+                    let arg = ["command", "file_path", "pattern", "query", "url", "prompt"]
+                        .iter()
+                        .find_map(|k| i.and_then(|i| i.get(*k)).and_then(|x| x.as_str()))
+                        .unwrap_or("");
+                    let id = b.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                    out.push(card("tool", name, clip(arg, 200), id));
+                }
+                _ => {} // thinking, and whatever the format grows next
             }
         }
-        let text: String = blocks
-            .iter()
-            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
-            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
-            .collect::<Vec<_>>()
-            .join("\n");
-        if text.trim().is_empty() {
-            return None;
-        }
-        return Some(Card { pane, kind: "claude".into(), title: "claude".into(), body: clip(&text, 500), ts });
     }
 
-    None
+    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn kind(line: &str) -> Option<String> {
-        parse_line(1, line).map(|c| c.kind)
+    fn one(line: &str) -> Card {
+        let mut v = parse_line(1, line);
+        assert_eq!(v.len(), 1, "expected exactly one card from {line}");
+        v.remove(0)
+    }
+    fn none(line: &str) -> bool {
+        parse_line(1, line).is_empty()
     }
 
     #[test]
     fn reads_a_plain_user_turn() {
-        let c = parse_line(7, r#"{"timestamp":"2026-07-31T09:41:02Z","message":{"role":"user","content":"build the thing"}}"#).unwrap();
+        let c = one(r#"{"timestamp":"2026-07-31T09:41:02Z","message":{"role":"user","content":"build the thing"}}"#);
         assert_eq!(c.kind, "you");
         assert_eq!(c.body, "build the thing");
         assert_eq!(c.ts, "09:41");
-        assert_eq!(c.pane, 7);
+        assert_eq!(c.pane, 1);
     }
 
     #[test]
     fn names_the_tool_and_its_subject() {
-        let c = parse_line(1, r#"{"message":{"role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":"cargo test"}}]}}"#).unwrap();
+        let c = one(r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"tu_1","name":"Bash","input":{"command":"cargo test"}}]}}"#);
         assert_eq!(c.kind, "tool");
         assert_eq!(c.title, "Bash");
         assert_eq!(c.body, "cargo test");
+        assert_eq!(c.id, "tu_1");
     }
 
     #[test]
-    fn tool_results_are_not_mistaken_for_the_user() {
+    fn keeps_every_parallel_tool_call() {
+        // collapsing these to one would undercount outstanding tools, and the
+        // outstanding count is exactly what M3 reads to say "this needs you"
+        let v = parse_line(1, r#"{"message":{"role":"assistant","content":[
+            {"type":"text","text":"checking both"},
+            {"type":"tool_use","id":"a","name":"Read","input":{"file_path":"x.rs"}},
+            {"type":"tool_use","id":"b","name":"Grep","input":{"pattern":"fn main"}}]}}"#);
+        assert_eq!(v.len(), 3);
+        assert_eq!(v[0].kind, "claude");           // said it, then did it — in order
+        assert_eq!((v[1].title.as_str(), v[1].id.as_str()), ("Read", "a"));
+        assert_eq!((v[2].title.as_str(), v[2].id.as_str()), ("Grep", "b"));
+    }
+
+    #[test]
+    fn a_result_carries_the_id_of_the_call_it_closes() {
+        let v = parse_line(1, r#"{"message":{"role":"user","content":[
+            {"type":"tool_result","tool_use_id":"a","content":"ok, 3 passed"},
+            {"type":"tool_result","tool_use_id":"b","content":""}]}}"#);
+        assert_eq!(v.len(), 2);
         // they arrive wearing the user role; calling them "you" would put words
-        // in the user's mouth, which is the exact failure the transcript work hit before
-        assert_eq!(kind(r#"{"message":{"role":"user","content":[{"type":"tool_result","content":"ok, 3 passed"}]}}"#).as_deref(), Some("result"));
+        // in the user's mouth, which is the exact failure the vault transcripts hit
+        assert_eq!(v[0].kind, "result");
+        assert_eq!(v[0].id, "a");
+        // an empty result is silent in the timeline but must still be returned,
+        // or its call stays outstanding forever and the pane lies about needing you
+        assert_eq!(v[1].id, "b");
+        assert_eq!(v[1].body, "");
     }
 
     #[test]
     fn ignores_subagent_chatter_and_junk() {
-        assert_eq!(kind(r#"{"isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}"#), None);
-        assert_eq!(kind("not json at all"), None);
-        assert_eq!(kind("{}"), None);
-        assert_eq!(kind(r#"{"message":{"role":"user","content":"<system-reminder>noise</system-reminder>"}}"#), None);
-        assert_eq!(kind(r#"{"message":{"role":"assistant","content":[{"type":"text","text":"   "}]}}"#), None);
+        assert!(none(r#"{"isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}"#));
+        assert!(none("not json at all"));
+        assert!(none("{}"));
+        assert!(none(r#"{"message":{"role":"user","content":"<system-reminder>noise</system-reminder>"}}"#));
+        assert!(none(r#"{"message":{"role":"assistant","content":[{"type":"text","text":"   "}]}}"#));
+        assert!(none(r#"{"message":{"role":"assistant","content":[{"type":"thinking","thinking":"hmm"}]}}"#));
     }
 
     #[test]
     fn clips_on_character_boundaries() {
         // byte slicing here would panic on any multi-byte character
         let long = "é".repeat(600);
-        let c = parse_line(1, &format!(r#"{{"message":{{"role":"assistant","content":[{{"type":"text","text":"{long}"}}]}}}}"#)).unwrap();
+        let c = one(&format!(r#"{{"message":{{"role":"assistant","content":[{{"type":"text","text":"{long}"}}]}}}}"#));
         assert_eq!(c.body.chars().count(), 501); // 500 + the ellipsis
     }
 
     #[test]
     fn keeps_slash_commands_but_drops_machinery() {
         // a slash command IS the user talking, even though it is wrapped in tags
-        let c = parse_line(1, r#"{"message":{"role":"user","content":"<command-message>office-hours</command-message>\n<command-name>/office-hours</command-name>\n<command-args>plan the cockpit</command-args>"}}"#).unwrap();
+        let c = one(r#"{"message":{"role":"user","content":"<command-message>office-hours</command-message>\n<command-name>/office-hours</command-name>\n<command-args>plan the cockpit</command-args>"}}"#);
         assert_eq!(c.kind, "you");
         assert_eq!(c.body, "/office-hours plan the cockpit");
 
         // a command with no arguments still counts
-        assert_eq!(
-            parse_line(1, r#"{"message":{"role":"user","content":"<command-name>/clear</command-name>"}}"#).unwrap().body,
-            "/clear"
-        );
+        assert_eq!(one(r#"{"message":{"role":"user","content":"<command-name>/clear</command-name>"}}"#).body, "/clear");
 
         // genuine machinery still goes in the bin
-        assert_eq!(kind(r#"{"message":{"role":"user","content":"<task-notification><task-id>x</task-id></task-notification>"}}"#), None);
-        assert_eq!(kind(r#"{"message":{"role":"user","content":"<command-name>  </command-name>"}}"#), None);
-        assert_eq!(kind(r#"{"message":{"role":"user","content":"<command-name>unclosed"}}"#), None);
+        assert!(none(r#"{"message":{"role":"user","content":"<task-notification><task-id>x</task-id></task-notification>"}}"#));
+        assert!(none(r#"{"message":{"role":"user","content":"<command-name>  </command-name>"}}"#));
+        assert!(none(r#"{"message":{"role":"user","content":"<command-name>unclosed"}}"#));
     }
 
     #[test]
@@ -289,7 +339,12 @@ mod tests {
 
 /// Watch the transcript belonging to a pane and stream cards as they appear.
 /// Runs until the pane is gone; every failure is soft.
-pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str) + Send + 'static>(
+/// `on_status` is called with a human-readable line and whether the transcript we
+/// settled on is **this pane's own session**. That flag is not cosmetic: while we
+/// are merely catching up on somebody else's transcript, its outstanding tool
+/// calls say nothing about this pane, and treating them as if they did produces
+/// confident false alarms.
+pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str, bool) + Send + 'static>(
     pane: u32,
     cwd: String,
     started: SystemTime,
@@ -298,7 +353,7 @@ pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str) + Send + 'static>(
 ) {
     std::thread::spawn(move || {
         let Some(dir) = project_dir(&cwd) else {
-            on_status("no transcript directory for this folder");
+            on_status("no transcript directory for this folder", false);
             return;
         };
 
@@ -326,16 +381,19 @@ pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str) + Send + 'static>(
                         // Our own session is short and worth replaying whole.
                         // An older one is prior context: show only its tail.
                         pos = if ours { 0 } else { tail_start(&p) };
-                        on_status(&format!(
-                            "{} {}",
-                            if ours { "following" } else { "catching up on" },
-                            p.file_name().unwrap_or_default().to_string_lossy()
-                        ));
+                        on_status(
+                            &format!(
+                                "{} {}",
+                                if ours { "following" } else { "catching up on" },
+                                p.file_name().unwrap_or_default().to_string_lossy()
+                            ),
+                            ours,
+                        );
                         path = Some(p);
                     }
                     locked = ours;
                 } else if waited == 0 {
-                    on_status("no claude session in this folder yet");
+                    on_status("no claude session in this folder yet", false);
                 }
             }
             waited += 1;
@@ -364,7 +422,7 @@ pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str) + Send + 'static>(
                                     pos -= n as u64;
                                     break;
                                 }
-                                if let Some(c) = parse_line(pane, &line) {
+                                for c in parse_line(pane, &line) {
                                     on_card(c);
                                 }
                             }

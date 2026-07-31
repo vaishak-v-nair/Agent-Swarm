@@ -3,12 +3,14 @@ import { listen } from '@tauri-apps/api/event';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { paneState, fmt } from './state.js';
 import '@xterm/xterm/css/xterm.css';
 
 addEventListener('error', e => diag('window error: ' + e.message + ' @' + e.filename + ':' + e.lineno));
 addEventListener('unhandledrejection', e => diag('unhandled rejection: ' + e.reason));
 
 const grid = document.getElementById('grid');
+const tally = document.getElementById('tally');
 const panes = new Map();          // id -> { term, fit, el, dot, profile, alive }
 let nextId = 1;
 let focused = null;
@@ -80,6 +82,7 @@ async function newPane(profile = 'powershell') {
   el.innerHTML =
     `<div class="head"><span class="dot"></span><span class="name">${profile}</span>` +
     `<span class="id">#${id}</span>` +
+    `<span class="state">starting</span>` +
     `<span class="mode" title="raw output ⇄ plain english (ctrl+shift+E)">raw</span>` +
     `<span class="x" title="close">✕</span></div>` +
     `<div class="term"></div>` +
@@ -113,8 +116,17 @@ async function newPane(profile = 'powershell') {
               cards: el.querySelector('.cards'),
               status: el.querySelector('.flow-status'),
               modeEl: el.querySelector('.mode'),
-              sem: false, pinned: true };
+              stateEl: el.querySelector('.state'),
+              sem: false, pinned: true,
+              // M3 state: tools called but not yet finished, keyed by tool_use id
+              pending: new Map(), lastByte: 0, lastCardAt: 0, lastKind: null, bellAt: 0,
+              burst: 0, quietSince: 0,
+              own: false };  // not this pane's own session until the watcher says so
   panes.set(id, p);
+
+  // The bell is Claude Code asking for you by name — the one unambiguous signal
+  // in the whole stream. xterm surfaces it for us, so we never touch the bytes.
+  term.onBell(() => { p.bellAt ||= Date.now(); });
   p.modeEl.addEventListener('click', e => { e.stopPropagation(); setMode(p, !p.sem); });
   // Stop auto-scrolling the moment the user scrolls up. Yanking someone away from
   // what they are reading is the terminal behaviour this app exists to fix.
@@ -129,7 +141,9 @@ async function newPane(profile = 'powershell') {
 
   // Input goes straight out. It never waits on rendering or on the reader
   // thread, which is what keeps typing instant while agents flood output.
-  term.onData(data => invoke('pty_write', { id, data }));
+  // Typing IS the answer to "does this need you". Whatever it was asking, you
+  // are now dealing with it, so the alarm stops.
+  term.onData(data => { p.bellAt = 0; p.el.classList.remove('unseen'); invoke('pty_write', { id, data }); });
   el.addEventListener('mousedown', () => focus(id));
   el.querySelector('.x').addEventListener('click', e => { e.stopPropagation(); closePane(id); });
 
@@ -165,6 +179,93 @@ async function newPane(profile = 'powershell') {
   }
 }
 
+/* ── M3: what is happening right now ───────────────────────────────────────
+   M2 answered "what happened". This answers "does this need me", which is the
+   question that actually costs time — an agent asks for permission, you are in
+   another window, and twelve minutes go by.
+
+   Nothing here scrapes the terminal for prompt text. State is derived from two
+   things we already have honestly:
+
+     · the bell, which is Claude Code asking for you by name
+     · an outstanding tool call — one whose result has not arrived — combined
+       with a terminal that has gone quiet
+
+   That second signal is the useful one. A tool that is *running* produces
+   output. A tool that has been called, has produced nothing, and is not
+   finishing is a tool waiting on a human. It works without knowing a single
+   thing about how the prompt is drawn, so it survives Claude Code changing it. */
+
+let lastTitle = '';
+
+/* Throughput floor, in decayed bytes. Output decays ~45% per tick, so a pane
+   streaming R bytes/sec settles near 1.1·R — this floor is roughly "700 bytes a
+   second, sustained". Comfortably above an idle repaint, comfortably below
+   anything that counts as progress. */
+const BURST_FLOOR = 800;
+const DECAY = 0.55;
+
+function tick() {
+  const now = Date.now();
+  let needs = 0, working = 0;
+
+  panes.forEach(p => {
+    p.burst *= DECAY;
+    if (p.burst < BURST_FLOOR) p.quietSince ||= now;
+    else p.quietSince = 0;
+
+    const s = paneState(p, now);
+    const changed = s.key !== p.state?.key;
+    p.state = s;
+    p.el.dataset.state = s.key;
+    p.stateEl.textContent = s.since > 1500 ? `${s.label} · ${fmt(s.since)}` : s.label;
+    if (s.key === 'needs') needs++;
+    else if (s.key === 'work') working++;
+    // Entering "needs you" is the moment worth a nudge. Staying in it is not —
+    // repeating the nudge every second is how a good signal becomes wallpaper.
+    if (changed) {
+      if (s.key === 'needs') p.el.classList.add('unseen');
+      // Why did it say that? A state machine that decides when to interrupt
+      // someone should be able to account for itself afterwards.
+      diag(`pane ${p.id} → ${s.key} (${s.label}) burst=${Math.round(p.burst)}`);
+    }
+  });
+
+  const bits = [];
+  if (needs) bits.push(`${needs} needs you`);
+  if (working) bits.push(`${working} working`);
+  tally.textContent = bits.join(' · ');
+  tally.classList.toggle('alert', needs > 0);
+
+  // The title is the only part of the cockpit visible when AgentSwarm is not the
+  // window you are looking at — which is the whole problem. It always carries the
+  // session count, so a glance at the taskbar is never ambiguous about whether
+  // the app is reporting or merely sitting there.
+  const n = panes.size;
+  const title = needs
+    ? `● ${needs} needs you — AgentSwarm`
+    : n ? `AgentSwarm — ${n} session${n > 1 ? 's' : ''}` : 'AgentSwarm';
+  if (title !== lastTitle) {
+    const rising = needs > 0 && !lastTitle.startsWith('●');
+    lastTitle = title;
+    invoke('set_attention', { title, flash: rising })
+      .catch(e => diag(`set_attention failed: ${e}`));  // never swallow this again
+  }
+}
+setInterval(tick, 500);
+
+/** Jump to whatever is waiting on you, oldest first. The point of a cockpit is
+ *  that you never have to go looking. */
+function jumpToNeedy() {
+  const waiting = [...panes.values()]
+    .filter(p => p.state?.key === 'needs')
+    .sort((a, b) => b.state.since - a.state.since);
+  if (!waiting.length) return;
+  // already on the oldest? move to the next one instead of doing nothing
+  const i = waiting.findIndex(p => p.id === focused);
+  focus(waiting[(i + 1) % waiting.length].id);
+}
+
 /* ── the toggle ────────────────────────────────────────────────────────────
    Same live session, two readings. Raw is the terminal, unmodified — this is
    never a replacement for it. Flow is what actually happened, in sentences.
@@ -187,6 +288,19 @@ function addCard(c) {
   const p = panes.get(c.pane);
   if (!p) return;
   if (!p.semLive) { p.semLive = true; diag(`pane ${p.id} semantic layer live`); }
+
+  // M3 bookkeeping. A tool card opens a question; its result closes it. The gap
+  // between them, when the terminal is also silent, is where you are the blocker.
+  p.lastCardAt = Date.now();
+  p.lastKind = c.kind;
+  if (c.kind === 'tool' && c.id) p.pending.set(c.id, { name: c.title, at: Date.now() });
+  else if (c.kind === 'result' && c.id) p.pending.delete(c.id);
+  // The transcript moving at all means the agent is unblocked.
+  if (c.kind !== 'tool') p.bellAt = 0;
+
+  // An empty result closes its call and says nothing worth a row in the timeline.
+  if (c.kind === 'result' && !c.body) return;
+
   p.status.style.display = 'none';
 
   const d = document.createElement('div');
@@ -277,6 +391,8 @@ listen('pty:data', e => {
   const p = panes.get(e.payload.id);
   if (!p) return;
   p.bytes += e.payload.data.length;
+  p.lastByte = Date.now();
+  p.burst += e.payload.data.length;   // throughput, which is what M3 reads as liveness
   p.term.write(e.payload.data);
 }).catch(err => diag('FATAL listener[pty:data] denied: ' + err));
 
@@ -290,7 +406,13 @@ listen('sem:card', e => addCard(e.payload))
 
 listen('sem:status', e => {
   const p = panes.get(e.payload.pane);
-  if (p) p.status.textContent = e.payload.text;
+  if (!p) return;
+  p.status.textContent = e.payload.text;
+  // Switching to our own session invalidates everything the borrowed one told us.
+  if (e.payload.own && !p.own) { p.pending.clear(); p.lastKind = null; }
+  p.own = e.payload.own;
+  p.el.classList.toggle('borrowed', !e.payload.own);
+  diag(`pane ${p.id} transcript: ${e.payload.text}${e.payload.own ? '' : ' (context only)'}`);
 }).catch(err => diag('listener[sem:status] denied: ' + err));
 
 // Self-check. A pane that is alive but has received nothing is broken, and M1
@@ -318,6 +440,7 @@ addEventListener('keydown', e => {
   else if (k === 'w') { hit(); if (focused) closePane(focused); }
   else if (k === 'z') { hit(); toggleZoom(); }
   else if (k === 'e') { hit(); const p = panes.get(focused); if (p) setMode(p, !p.sem); }
+  else if (e.key === ' ') { hit(); jumpToNeedy(); }
   // Flip the whole cockpit at once — the "what is everyone doing" view.
   else if (k === 'a') { hit(); const on = ![...panes.values()].every(p => p.sem); panes.forEach(p => setMode(p, on)); }
   else if (e.key === 'ArrowRight') { hit(); cycle(1); }

@@ -102,6 +102,44 @@ html, body {
 .head .mode:hover { color: var(--fg); border-color: var(--dim); }
 .pane.semantic .head .mode { color: var(--accent); border-color: var(--accent); }
 
+/* ── M3: state, at a glance ───────────────────────────────────────────────
+   Nine panes means nine of these on screen at once, so they have to be legible
+   without being read. Colour does the work; the text is confirmation.          */
+.head .state { margin-left: auto; font-size: 10px; letter-spacing: .2px; color: var(--dim); }
+.head .mode { margin-left: 8px; }
+
+.pane[data-state="work"]  .dot { background: var(--live); }
+.pane[data-state="work"]  .state { color: #6f9c86; }
+.pane[data-state="done"]  .dot { background: #5b9cd6; }
+.pane[data-state="done"]  .state { color: #7db4e6; }
+.pane[data-state="idle"]  .dot { background: #5b606b; }
+.pane[data-state="ended"] .dot { background: #5b606b; }
+.pane[data-state="ended"] .state { color: #5b606b; }
+
+/* The one state worth interrupting for. Everything else is information; this is
+   a request. It gets the accent colour, the border, and the only animation in
+   the app — spend that budget once, on the thing that costs twelve minutes. */
+.pane[data-state="needs"] { border-color: var(--accent); }
+.pane[data-state="needs"] .state { color: var(--accent); font-weight: 600; }
+.pane[data-state="needs"] .dot { background: var(--accent); animation: breathe 1.9s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 84, 122, .55); }
+  50%      { box-shadow: 0 0 0 5px rgba(214, 84, 122, 0); }
+}
+/* Someone who set reduce-motion has told us pulsing is a problem for them.
+   The colour and the border already carry the whole message. */
+@media (prefers-reduced-motion: reduce) {
+  .pane[data-state="needs"] .dot { animation: none; }
+}
+
+/* Cards from an earlier session in this folder: real history, but not this
+   pane's. Dimmed so it never reads as live, since the state chip is deliberately
+   refusing to draw conclusions from it. */
+.pane.borrowed .cards { opacity: .62; }
+
+#tally { font-size: 11px; color: var(--dim); }
+#tally.alert { color: var(--accent); font-weight: 600; }
+
 /* Something happened in a pane you weren't watching. A hairline, not a klaxon:
    nine of these blinking at once would be worse than the problem it reports. */
 .pane.unseen .dot { box-shadow: 0 0 0 3px rgba(214, 84, 122, .25); }

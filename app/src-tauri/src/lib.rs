@@ -21,6 +21,10 @@ struct Exit {
 struct Status {
     pane: u32,
     text: String,
+    /// True once we are following this pane's *own* session. Until then the
+    /// cards are context from an earlier session, and must not be used to judge
+    /// whether this pane is waiting on you.
+    own: bool,
 }
 
 /// The app's sink: PTY bytes become webview events.
@@ -81,10 +85,28 @@ fn sem_attach(app: AppHandle, id: u32, cwd: String) {
         move |card| {
             let _ = a1.emit("sem:card", card);
         },
-        move |text| {
-            let _ = a2.emit("sem:status", Status { pane: id, text: text.to_string() });
+        move |text, own| {
+            let _ = a2.emit("sem:status", Status { pane: id, text: text.to_string(), own });
         },
     );
+}
+
+/// M3. Carry the cockpit's state out to the operating system.
+///
+/// The window title is the part that works when AgentSwarm isn't the window you
+/// are looking at — which is the entire problem: an agent asked for permission,
+/// you were somewhere else, and twelve minutes went by. Taskbar attention is
+/// requested only on the transition into needing you, and only when the window
+/// is not already focused; anything more insistent than that becomes noise, and
+/// noise is what people learn to ignore.
+#[tauri::command]
+fn set_attention(app: AppHandle, title: String, flash: bool) {
+    use tauri::Manager;
+    let Some(w) = app.get_webview_window("main") else { return };
+    let _ = w.set_title(&title);
+    if flash && !w.is_focused().unwrap_or(false) {
+        let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+    }
 }
 
 /// Where a pane starts, and therefore which transcript belongs to it.
@@ -161,6 +183,7 @@ pub fn run() {
             available_profiles,
             sem_attach,
             default_cwd,
+            set_attention,
             diag
         ])
         .run(tauri::generate_context!())
