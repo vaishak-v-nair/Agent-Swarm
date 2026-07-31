@@ -8,11 +8,9 @@
 //! behind its own short-lived lock. Nothing reads and writes under one mutex.
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
-use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
 
 pub struct Pane {
     master: Box<dyn MasterPty + Send>,
@@ -22,15 +20,12 @@ pub struct Pane {
 #[derive(Default)]
 pub struct Panes(pub Mutex<HashMap<u32, Pane>>);
 
-#[derive(Clone, Serialize)]
-struct Chunk<'a> {
-    id: u32,
-    data: &'a str,
-}
-
-#[derive(Clone, Serialize)]
-struct Exit {
-    id: u32,
+/// Where PTY output goes. The app sends it to the webview; the benchmark counts
+/// bytes. Keeping this abstract is what lets the latency test exercise the real
+/// spawn/read/write code instead of a lookalike copy of it.
+pub trait Sink: Send + Sync + 'static {
+    fn data(&self, id: u32, text: &str);
+    fn exit(&self, id: u32);
 }
 
 /// What a pane runs. Resolved here rather than in the UI so the frontend never
@@ -59,8 +54,8 @@ pub fn resolve(profile: &str) -> CommandBuilder {
     }
 }
 
-pub fn spawn(
-    app: AppHandle,
+pub fn spawn<S: Sink>(
+    sink: Arc<S>,
     panes: Arc<Panes>,
     id: u32,
     profile: &str,
@@ -98,7 +93,6 @@ pub fn spawn(
 
     // Reader thread: emit and nothing else. Never touches the panes lock, so a
     // busy agent can never block a keystroke or a resize.
-    let emit_app = app.clone();
     std::thread::spawn(move || {
         let mut buf = [0u8; 16 * 1024];
         loop {
@@ -107,19 +101,13 @@ pub fn spawn(
                 Ok(n) => {
                     // PTY bytes are not guaranteed to split on char boundaries.
                     let text = String::from_utf8_lossy(&buf[..n]);
-                    let _ = emit_app.emit(
-                        "pty:data",
-                        Chunk {
-                            id,
-                            data: text.as_ref(),
-                        },
-                    );
+                    sink.data(id, text.as_ref());
                 }
                 Err(_) => break,
             }
         }
         let _ = child.wait();
-        let _ = emit_app.emit("pty:exit", Exit { id });
+        sink.exit(id);
     });
 
     Ok(())

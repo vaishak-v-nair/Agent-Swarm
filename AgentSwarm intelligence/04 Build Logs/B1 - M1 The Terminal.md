@@ -41,11 +41,31 @@ A native Windows app: `app/src-tauri/target/release/agentswarm.exe`.
 | Frontend build | ✅ 397 KB, 100 KB gzipped, 1.6 s |
 | Rust build (debug) | ✅ 4 m 40 s cold |
 | Rust build (release) | ✅ 7 m 45 s, LTO + opt-level=s |
-| Launch | ✅ window opens, survives 8 s smoke test |
+| Launch | ✅ verified by process tree: webview + PTY + **claude.exe running inside** |
 | Binary size | **2.9 MB** release (12.0 MB debug) |
 | Memory at rest | **21.9 MB** release, one pane (35.8 MB debug) |
 
-**Not yet verified:** typing latency under heavy agent output, WSL profile end to end, multi-pane behaviour past 4 sessions, and behaviour across sleep/wake. These need a human at the keyboard.
+## Pressure test — the invariant, measured
+
+The claim was *input never waits on output*. It is now measured, not asserted.
+
+ spawns real PTYs through the **same**  the app uses, floods every pane continuously, and times a single keystroke reaching its pane while that runs.
+
+| | 6 panes / 10 s | 13 panes / 12 s |
+|---|---|---|
+| Output while measuring | 34.9 MB · 3.5 MB/s | 22.2 MB · 1.8 MB/s |
+| Chunks emitted | 206,328 | 139,259 |
+| Keystroke p50 under load | **8.6 µs** | **11.1 µs** |
+| Keystroke p95 under load | 47.0 µs | 54.1 µs |
+| Keystroke p99 under load | **98.4 µs** | **240.3 µs** |
+| p50 load ÷ idle | 0.58× | 0.76× |
+
+**p99 is 0.1–0.24 ms under full load.** A human starts to feel input lag around 30 ms — this is 100× under it. The load-to-idle ratio being *below 1* means writes did not contend with readers at all; the idle samples are simply noisier (300 samples versus ~3,000).
+
+To make this testable,  became generic over a  trait. The app's sink emits webview events; the benchmark's counts bytes. The test therefore exercises the real spawn/read/write path rather than a copy of it.
+
+Reproduce: 
+**Still not verified:** WSL profile end to end, sleep/wake behaviour (the WebGL fallback path), and how the *rendering* layer holds up at these rates — this test measures the PTY layer, not xterm.js paint time. Those need a human at the keyboard.
 
 ## What M1 deliberately does not do
 

@@ -1,8 +1,32 @@
-mod pty;
+pub mod pty;
 
-use pty::Panes;
+use pty::{Panes, Sink};
+use serde::Serialize;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+#[derive(Clone, Serialize)]
+struct Chunk<'a> {
+    id: u32,
+    data: &'a str,
+}
+
+#[derive(Clone, Serialize)]
+struct Exit {
+    id: u32,
+}
+
+/// The app's sink: PTY bytes become webview events.
+struct WebviewSink(AppHandle);
+
+impl Sink for WebviewSink {
+    fn data(&self, id: u32, text: &str) {
+        let _ = self.0.emit("pty:data", Chunk { id, data: text });
+    }
+    fn exit(&self, id: u32) {
+        let _ = self.0.emit("pty:exit", Exit { id });
+    }
+}
 
 struct AppState {
     panes: Arc<Panes>,
@@ -18,7 +42,16 @@ fn pty_spawn(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    pty::spawn(app, state.panes.clone(), id, &profile, cwd, cols, rows).map_err(|e| e.to_string())
+    pty::spawn(
+        Arc::new(WebviewSink(app)),
+        state.panes.clone(),
+        id,
+        &profile,
+        cwd,
+        cols,
+        rows,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
