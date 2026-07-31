@@ -5,6 +5,10 @@ description = "The terminal built for agentic coding"
 edition = "2021"
 rust-version = "1.77"
 
+[[bin]]
+name = "agentswarm"
+path = "src/main.rs"
+
 [lib]
 name = "agentswarm_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

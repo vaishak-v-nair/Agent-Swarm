@@ -1,0 +1,379 @@
+//! M2 — the semantic layer.
+//!
+//! The pane shows the real terminal. This module reads the *same session* from
+//! Claude Code's own JSONL transcript and turns it into structured cards, so the
+//! UI can render understanding instead of scraping the screen.
+//!
+//! Two rules, both learned the hard way:
+//!   1. Never parse the rendered terminal. Structure comes from the transcript.
+//!   2. The format is undocumented and will drift. Every parse is best-effort and
+//!      degrades to "unknown" rather than throwing — a broken card must never
+//!      take the terminal down with it.
+
+use serde::Serialize;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
+
+/// One thing that happened, distilled. Deliberately small: the timeline is a
+/// summary, and anything richer is one keystroke away in the raw view.
+#[derive(Clone, Serialize)]
+pub struct Card {
+    pub pane: u32,
+    pub kind: String,   // "you" | "claude" | "tool" | "result"
+    pub title: String,
+    pub body: String,
+    pub ts: String,
+}
+
+/// Claude Code stores transcripts under a directory named after the cwd with
+/// every non-alphanumeric character replaced by a dash.
+pub fn project_dir(cwd: &str) -> Option<PathBuf> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()?;
+    let slug: String = cwd
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    Some(PathBuf::from(home).join(".claude").join("projects").join(slug))
+}
+
+/// The newest transcript in that directory, ignoring subagent sidechain files.
+fn newest(dir: &PathBuf) -> Option<PathBuf> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension().map(|x| x == "jsonl").unwrap_or(false)
+                && !p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("agent-"))
+                    .unwrap_or(false)
+        })
+        .max_by_key(|p| {
+            std::fs::metadata(p)
+                .and_then(|m| m.modified())
+                .unwrap_or(SystemTime::UNIX_EPOCH)
+        })
+}
+
+/// Where to start reading a transcript we did not create. A long-running session
+/// can be tens of megabytes; replaying all of it would bury today's work under
+/// last week's. Take the recent tail, then stream.
+fn tail_start(path: &PathBuf) -> u64 {
+    const TAIL: u64 = 256 * 1024;
+    let mut pos = std::fs::metadata(path)
+        .map(|m| m.len().saturating_sub(TAIL))
+        .unwrap_or(0);
+    if pos > 0 {
+        // we almost certainly landed mid-line; discard the fragment
+        if let Ok(f) = std::fs::File::open(path) {
+            let mut r = BufReader::new(f);
+            if r.seek(SeekFrom::Start(pos)).is_ok() {
+                let mut skip = String::new();
+                if let Ok(n) = r.read_line(&mut skip) {
+                    pos += n as u64;
+                }
+            }
+        }
+    }
+    pos
+}
+
+fn clip(s: &str, n: usize) -> String {
+    let s = s.trim().replace(['\r', '\n'], " ");
+    if s.chars().count() > n {
+        s.chars().take(n).collect::<String>() + "…"
+    } else {
+        s
+    }
+}
+
+fn tag<'a>(s: &'a str, name: &str) -> Option<&'a str> {
+    let open = format!("<{name}>");
+    let close = format!("</{name}>");
+    let i = s.find(&open)? + open.len();
+    let j = s[i..].find(&close)? + i;
+    Some(&s[i..j])
+}
+
+/// A slash command is stored as XML-ish tags, so it looks like machinery and is
+/// easy to discard as noise. It isn't — it's the user typing. Dropping these
+/// silently deletes whole instructions from the record, which is precisely how an
+/// earlier pass lost the original pitch for this app.
+fn slash_command(text: &str) -> Option<String> {
+    let name = tag(text, "command-name")?.trim();
+    if name.is_empty() {
+        return None;
+    }
+    let args = tag(text, "command-args").unwrap_or("").trim();
+    Some(if args.is_empty() {
+        name.to_string()
+    } else {
+        clip(&format!("{name} {args}"), 400)
+    })
+}
+
+/// Turn one transcript line into at most one card. Returns None for anything we
+/// do not understand, which is the honest answer for an undocumented format.
+pub fn parse_line(pane: u32, line: &str) -> Option<Card> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    if v.get("isSidechain").and_then(|b| b.as_bool()).unwrap_or(false) {
+        return None;
+    }
+    let ts = v
+        .get("timestamp")
+        .and_then(|t| t.as_str())
+        .map(|t| t.get(11..16).unwrap_or("").to_string())
+        .unwrap_or_default();
+    let msg = v.get("message")?;
+    let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
+    let content = msg.get("content")?;
+
+    // plain string content = a user message
+    if let Some(text) = content.as_str() {
+        if role != "user" {
+            return None;
+        }
+        if let Some(cmd) = slash_command(text) {
+            return Some(Card { pane, kind: "you".into(), title: "you".into(), body: cmd, ts });
+        }
+        if text.starts_with('<') {
+            return None; // task-notification, caveat, reminder — machinery, not the user
+        }
+        return Some(Card { pane, kind: "you".into(), title: "you".into(), body: clip(text, 400), ts });
+    }
+
+    let blocks = content.as_array()?;
+
+    if role == "user" {
+        // tool results arrive wearing the user role; they are machine output
+        for b in blocks {
+            if b.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
+                let body = b
+                    .get("content")
+                    .map(|c| match c.as_str() {
+                        Some(s) => s.to_string(),
+                        None => c
+                            .as_array()
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|x| x.get("text").and_then(|t| t.as_str()))
+                                    .collect::<Vec<_>>()
+                                    .join(" ")
+                            })
+                            .unwrap_or_default(),
+                    })
+                    .unwrap_or_default();
+                if body.trim().is_empty() {
+                    return None;
+                }
+                return Some(Card { pane, kind: "result".into(), title: "result".into(), body: clip(&body, 240), ts });
+            }
+        }
+        let text: String = blocks
+            .iter()
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join(" ");
+        if text.trim().is_empty() || text.starts_with('<') {
+            return None;
+        }
+        return Some(Card { pane, kind: "you".into(), title: "you".into(), body: clip(&text, 400), ts });
+    }
+
+    if role == "assistant" {
+        for b in blocks {
+            if b.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                let name = b.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                let i = b.get("input");
+                let arg = ["command", "file_path", "pattern", "query", "url", "prompt"]
+                    .iter()
+                    .find_map(|k| i.and_then(|i| i.get(*k)).and_then(|x| x.as_str()))
+                    .unwrap_or("");
+                return Some(Card { pane, kind: "tool".into(), title: name.into(), body: clip(arg, 200), ts });
+            }
+        }
+        let text: String = blocks
+            .iter()
+            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if text.trim().is_empty() {
+            return None;
+        }
+        return Some(Card { pane, kind: "claude".into(), title: "claude".into(), body: clip(&text, 500), ts });
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn kind(line: &str) -> Option<String> {
+        parse_line(1, line).map(|c| c.kind)
+    }
+
+    #[test]
+    fn reads_a_plain_user_turn() {
+        let c = parse_line(7, r#"{"timestamp":"2026-07-31T09:41:02Z","message":{"role":"user","content":"build the thing"}}"#).unwrap();
+        assert_eq!(c.kind, "you");
+        assert_eq!(c.body, "build the thing");
+        assert_eq!(c.ts, "09:41");
+        assert_eq!(c.pane, 7);
+    }
+
+    #[test]
+    fn names_the_tool_and_its_subject() {
+        let c = parse_line(1, r#"{"message":{"role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":"cargo test"}}]}}"#).unwrap();
+        assert_eq!(c.kind, "tool");
+        assert_eq!(c.title, "Bash");
+        assert_eq!(c.body, "cargo test");
+    }
+
+    #[test]
+    fn tool_results_are_not_mistaken_for_the_user() {
+        // they arrive wearing the user role; calling them "you" would put words
+        // in the user's mouth, which is the exact failure the transcript work hit before
+        assert_eq!(kind(r#"{"message":{"role":"user","content":[{"type":"tool_result","content":"ok, 3 passed"}]}}"#).as_deref(), Some("result"));
+    }
+
+    #[test]
+    fn ignores_subagent_chatter_and_junk() {
+        assert_eq!(kind(r#"{"isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}"#), None);
+        assert_eq!(kind("not json at all"), None);
+        assert_eq!(kind("{}"), None);
+        assert_eq!(kind(r#"{"message":{"role":"user","content":"<system-reminder>noise</system-reminder>"}}"#), None);
+        assert_eq!(kind(r#"{"message":{"role":"assistant","content":[{"type":"text","text":"   "}]}}"#), None);
+    }
+
+    #[test]
+    fn clips_on_character_boundaries() {
+        // byte slicing here would panic on any multi-byte character
+        let long = "é".repeat(600);
+        let c = parse_line(1, &format!(r#"{{"message":{{"role":"assistant","content":[{{"type":"text","text":"{long}"}}]}}}}"#)).unwrap();
+        assert_eq!(c.body.chars().count(), 501); // 500 + the ellipsis
+    }
+
+    #[test]
+    fn keeps_slash_commands_but_drops_machinery() {
+        // a slash command IS the user talking, even though it is wrapped in tags
+        let c = parse_line(1, r#"{"message":{"role":"user","content":"<command-message>office-hours</command-message>\n<command-name>/office-hours</command-name>\n<command-args>plan the cockpit</command-args>"}}"#).unwrap();
+        assert_eq!(c.kind, "you");
+        assert_eq!(c.body, "/office-hours plan the cockpit");
+
+        // a command with no arguments still counts
+        assert_eq!(
+            parse_line(1, r#"{"message":{"role":"user","content":"<command-name>/clear</command-name>"}}"#).unwrap().body,
+            "/clear"
+        );
+
+        // genuine machinery still goes in the bin
+        assert_eq!(kind(r#"{"message":{"role":"user","content":"<task-notification><task-id>x</task-id></task-notification>"}}"#), None);
+        assert_eq!(kind(r#"{"message":{"role":"user","content":"<command-name>  </command-name>"}}"#), None);
+        assert_eq!(kind(r#"{"message":{"role":"user","content":"<command-name>unclosed"}}"#), None);
+    }
+
+    #[test]
+    fn maps_a_windows_path_to_its_project_dir() {
+        let d = project_dir("E:\\agent-swarm").unwrap();
+        assert!(d.ends_with("E--agent-swarm"), "got {d:?}");
+    }
+}
+
+/// Watch the transcript belonging to a pane and stream cards as they appear.
+/// Runs until the pane is gone; every failure is soft.
+pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str) + Send + 'static>(
+    pane: u32,
+    cwd: String,
+    started: SystemTime,
+    on_card: F,
+    on_status: S,
+) {
+    std::thread::spawn(move || {
+        let Some(dir) = project_dir(&cwd) else {
+            on_status("no transcript directory for this folder");
+            return;
+        };
+
+        // Attach to the newest transcript straight away so the pane has context
+        // immediately, then switch to this pane's own session the moment it
+        // starts writing.
+        //
+        // The first version instead waited for a *recently modified* file, which
+        // sounds right and is wrong: a session that is running but idle has an old
+        // mtime, so the common case — attach to work already in progress — never
+        // attached at all. It reported nothing and looked like a dead feature.
+        let mut path: Option<PathBuf> = None;
+        let mut pos: u64 = 0;
+        let mut locked = false; // found this pane's own session; stop switching
+        let mut waited = 0u32;
+
+        loop {
+            if !locked {
+                if let Some(p) = newest(&dir) {
+                    let ours = std::fs::metadata(&p)
+                        .and_then(|m| m.created().or_else(|_| m.modified()))
+                        .map(|t| t >= started)
+                        .unwrap_or(false);
+                    if path.as_ref() != Some(&p) {
+                        // Our own session is short and worth replaying whole.
+                        // An older one is prior context: show only its tail.
+                        pos = if ours { 0 } else { tail_start(&p) };
+                        on_status(&format!(
+                            "{} {}",
+                            if ours { "following" } else { "catching up on" },
+                            p.file_name().unwrap_or_default().to_string_lossy()
+                        ));
+                        path = Some(p);
+                    }
+                    locked = ours;
+                } else if waited == 0 {
+                    on_status("no claude session in this folder yet");
+                }
+            }
+            waited += 1;
+
+            let Some(path) = path.as_ref() else {
+                std::thread::sleep(Duration::from_millis(500));
+                continue;
+            };
+            let Ok(f) = std::fs::File::open(path) else { break };
+            let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+            if len < pos {
+                pos = 0; // file was replaced under us
+            }
+            if len > pos {
+                let mut r = BufReader::new(f);
+                if r.seek(SeekFrom::Start(pos)).is_ok() {
+                    let mut line = String::new();
+                    loop {
+                        line.clear();
+                        match r.read_line(&mut line) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                pos += n as u64;
+                                // a partial trailing line: rewind and wait for the rest
+                                if !line.ends_with('\n') {
+                                    pos -= n as u64;
+                                    break;
+                                }
+                                if let Some(c) = parse_line(pane, &line) {
+                                    on_card(c);
+                                }
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(400));
+        }
+    });
+}

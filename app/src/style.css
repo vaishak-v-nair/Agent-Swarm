@@ -88,10 +88,60 @@ html, body {
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); flex: 0 0 auto; }
 .dot.dead { background: #5b606b; }
 .head .name { color: var(--fg); }
-.head .x { margin-left: auto; cursor: pointer; padding: 0 3px; }
+.head .x { cursor: pointer; padding: 0 3px; }
 .head .x:hover { color: var(--accent); }
+.head .mode {
+  margin-left: auto;
+  cursor: pointer;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: .4px;
+}
+.head .mode:hover { color: var(--fg); border-color: var(--dim); }
+.pane.semantic .head .mode { color: var(--accent); border-color: var(--accent); }
+
+/* Something happened in a pane you weren't watching. A hairline, not a klaxon:
+   nine of these blinking at once would be worse than the problem it reports. */
+.pane.unseen .dot { box-shadow: 0 0 0 3px rgba(214, 84, 122, .25); }
 
 .term { flex: 1; min-height: 0; padding: 4px 2px 2px 6px; }
+
+/* ── the semantic layer ───────────────────────────────────────────────────
+   Both views stay mounted. The hidden one keeps receiving, so the toggle is a
+   change of reading, never a reload — and xterm keeps its exact scroll state.  */
+.flow { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px 12px; }
+.pane.semantic .term { display: none; }
+.pane.semantic .flow { display: block; }
+
+.flow-status { color: var(--dim); font-size: 11px; font-style: italic; padding: 4px 2px; }
+
+.card { padding: 6px 0 7px 11px; border-left: 2px solid var(--line); margin-bottom: 7px; }
+.card-head {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--dim);
+  margin-bottom: 2px;
+}
+.card-ts { margin-left: auto; font-size: 10px; opacity: .6; }
+.card-body { font-size: 12px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; word-break: break-word; }
+
+/* Colour carries the speaker, so scanning nine panes doesn't require reading. */
+.card.you    { border-left-color: var(--accent); }
+.card.you    .card-head { color: var(--accent); }
+.card.claude { border-left-color: #5b9cd6; }
+.card.claude .card-head { color: #7db4e6; }
+.card.tool   { border-left-color: #dfa03a; }
+.card.tool   .card-head { color: #dfa03a; }
+.card.tool   .card-body { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; color: #b6bcc7; }
+.card.result { border-left-color: var(--line); }
+.card.result .card-body { color: var(--dim); font-size: 11px; }
+
+.flow::-webkit-scrollbar { width: 9px; }
+.flow::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }
 .xterm { height: 100%; }
 .xterm-viewport::-webkit-scrollbar { width: 9px; }
 .xterm-viewport::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }

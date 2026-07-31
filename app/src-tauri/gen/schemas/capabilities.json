@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Core APIs the terminal needs. Without this file Tauri 2 grants nothing, and listen() is silently denied — which is exactly how M1 shipped with every pane blank.","local":true,"windows":["main"],"permissions":["core:default","core:event:default","core:window:default","core:webview:default"]}}

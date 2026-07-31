@@ -1,4 +1,5 @@
 pub mod pty;
+pub mod transcript;
 
 use pty::{Panes, Sink};
 use serde::Serialize;
@@ -16,7 +17,17 @@ struct Exit {
     id: u32,
 }
 
+#[derive(Clone, Serialize)]
+struct Status {
+    pane: u32,
+    text: String,
+}
+
 /// The app's sink: PTY bytes become webview events.
+///
+/// The emit is fire-and-forget by design — a rendering problem must never stall
+/// the reader thread, because the reader holds no lock the writer needs and that
+/// is the whole reason typing stays instant under load.
 struct WebviewSink(AppHandle);
 
 impl Sink for WebviewSink {
@@ -54,6 +65,36 @@ fn pty_spawn(
     .map_err(|e| e.to_string())
 }
 
+/// M2. Attach the semantic layer to a pane: watch the Claude Code transcript for
+/// this folder and stream structured cards alongside the raw terminal.
+///
+/// This is separate from pty_spawn on purpose. The terminal must work whether or
+/// not the semantic layer does — understanding is an addition, never a dependency.
+#[tauri::command]
+fn sem_attach(app: AppHandle, id: u32, cwd: String) {
+    let a1 = app.clone();
+    let a2 = app.clone();
+    transcript::watch(
+        id,
+        cwd,
+        std::time::SystemTime::now(),
+        move |card| {
+            let _ = a1.emit("sem:card", card);
+        },
+        move |text| {
+            let _ = a2.emit("sem:status", Status { pane: id, text: text.to_string() });
+        },
+    );
+}
+
+/// Where a pane starts, and therefore which transcript belongs to it.
+#[tauri::command]
+fn default_cwd() -> String {
+    std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
 #[tauri::command]
 fn pty_write(state: State<AppState>, id: u32, data: String) {
     pty::write(&state.panes, id, &data);
@@ -71,6 +112,13 @@ fn pty_kill(state: State<AppState>, id: u32) {
 
 /// Which shells actually exist on this machine. The UI asks once at startup and
 /// only offers real ones — a profile that fails to launch is worse than absent.
+/// The UI talking to stdout. Without this a frontend failure is invisible
+/// unless a human is looking at the window.
+#[tauri::command]
+fn diag(msg: String) {
+    println!("[ui] {msg}");
+}
+
 #[tauri::command]
 fn available_profiles() -> Vec<String> {
     let mut out = vec!["powershell".to_string(), "cmd".to_string()];
@@ -110,7 +158,10 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
-            available_profiles
+            available_profiles,
+            sem_attach,
+            default_cwd,
+            diag
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentSwarm");
