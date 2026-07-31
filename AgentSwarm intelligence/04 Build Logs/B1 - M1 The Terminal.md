@@ -49,7 +49,7 @@ A native Windows app: `app/src-tauri/target/release/agentswarm.exe`.
 
 The claim was *input never waits on output*. It is now measured, not asserted.
 
- spawns real PTYs through the **same**  the app uses, floods every pane continuously, and times a single keystroke reaching its pane while that runs.
+`ptybench` spawns real PTYs through the **same** `pty::spawn` the app uses, floods every pane continuously, and times a single keystroke reaching its pane while that runs.
 
 | | 6 panes / 10 s | 13 panes / 12 s |
 |---|---|---|
@@ -62,9 +62,15 @@ The claim was *input never waits on output*. It is now measured, not asserted.
 
 **p99 is 0.1–0.24 ms under full load.** A human starts to feel input lag around 30 ms — this is 100× under it. The load-to-idle ratio being *below 1* means writes did not contend with readers at all; the idle samples are simply noisier (300 samples versus ~3,000).
 
-To make this testable,  became generic over a  trait. The app's sink emits webview events; the benchmark's counts bytes. The test therefore exercises the real spawn/read/write path rather than a copy of it.
+To make this testable, `pty::spawn` became generic over a `Sink` trait. The app's sink emits webview events; the benchmark's counts bytes. The test therefore exercises the real spawn/read/write path rather than a copy of it.
 
-Reproduce: 
+Reproduce:
+
+```
+cd app/src-tauri
+cargo run --release --bin ptybench -- 13 12
+```
+
 **Still not verified:** WSL profile end to end, sleep/wake behaviour (the WebGL fallback path), and how the *rendering* layer holds up at these rates — this test measures the PTY layer, not xterm.js paint time. Those need a human at the keyboard.
 
 ## What M1 deliberately does not do
