@@ -1,3 +1,6 @@
 node_modules/
 .praxis/
 *.log
+app/node_modules/
+app/dist/
+app/src-tauri/target/

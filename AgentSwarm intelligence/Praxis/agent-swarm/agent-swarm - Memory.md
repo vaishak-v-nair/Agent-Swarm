@@ -1,6 +1,6 @@
 ---
 tags: [praxis, memory]
-updated: 2026-07-31T11:35:29.559Z
+updated: 2026-07-31T12:04:14.561Z
 ---
 
 > Auto-mirrored from `.praxis/memory.md` in [[agent-swarm]]. Edit the source, not this copy.
@@ -14,6 +14,20 @@ _(No project summary yet. Run `/praxis-save` in Claude Code, or edit this sectio
 
 ## Session Log
 <!-- Newest first. Auto-appended by the Stop hook. Older entries trimmed when large. -->
+
+### 2026-07-31T12:04:14.553Z - session
+- Working on: "Can claude watch, hear, extract youtube videos just like gemini or better than g" · "Which AI agent can watch youtube videos?"
+- In its words: "Google Gemini is the standout — it's the one mainstream AI that can genuinely "watch" a YouTube video rather than just read about it. In the Gemini API/app you can hand it a YouTube URL directly, and it processes the act"
+- (no file changes detected)
+- Transcript lines: 28
+- Run `/praxis-save` for a richer, decision-level summary.
+
+### 2026-07-31T11:59:53.289Z - session
+- Working on: "Can claude watch, hear, extract youtube videos just like gemini or better than g"
+- In its words: "No — not natively, and this is a real gap versus Gemini, not a marketing nuance. What Claude can do: - Images: yes, static image input (JPEG/PNG/GIF/WebP) via vision — screenshots, photos, diagrams, PDF pages. - Text: ye"
+- (no file changes detected)
+- Transcript lines: 22
+- Run `/praxis-save` for a richer, decision-level summary.
 
 ### 2026-07-31T11:35:29.536Z - session
 - Working on: "I just created two vaults: * It's own personal vault: E:\agent-swarm\AgentSwarm " · "yes, do everything." · "Let's continue with our project."
@@ -47,12 +61,5 @@ _(No project summary yet. Run `/praxis-save` in Claude Code, or edit this sectio
 - Files touched: C:/Users/vaish/.claude/skills/gstack/office-hours/sections/design-and-handoff.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/0fa326d2-802f-45f4-944d-bb99a8f49fda/scratchpad/gstack-sketch-agentswarm.html, C:/Users/vaish/.gstack/projects/agent-swarm/vaish-unknown-design-20260729-175656.md, C:/Users/vaish/.gstack/builder-journey.md, C:/Users/vaish/.claude/projects/E--agent-swarm/memory/agent-swarm-design.md, C:/Users/vaish/.claude/projects/E--agent-swarm/memory/user-vaishak-style.md, C:/Users/vaish/.claude/projects/E--agent-swarm/memory/MEMORY.md, C:/Users/vaish/.gstack/projects/agent-swarm/ceo-plans/2026-07-29-agent-swarm-mission-control.md, C:/Users/vaish/.claude/skills/gstack/plan-ceo-review/sections/review-sections.md, C:/Users/vaish/.claude/plans/from-my-perspective-i-iridescent-lampson.md, C:/Users/vaish/.claude/skills/gstack/plan-eng-review/sections/review-sections.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-08-findings-ab5716a7.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-03-findings-af88ae4f.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-05-findings-a969dc43.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-01-gate-graph-a233bd16.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-06-outside-voice-a571ff13.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-04-gate-graph-acd34064.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-07-stage2-delta-a208f412.md, C:/Users/vaish/.gstack/projects/agent-swarm/vaish-unknown-design-20260730-cockpit.md, AgentSwarm Vault/.obsidian/app.json (+31 more)
 - Transcript lines: 1407
 - Run `/praxis-save` inside Claude for a richer, decision-level summary.
-
-### 2026-07-30T16:45:03.630Z - session
-- Working on: "set the Windows Terminal bellStyle for me too" · "verify the notifications work" · "start a fresh session and run the three-layer test. Take all the information fro"
-- In its words: "Two of the three asks are done and verified. The third genuinely isn't mine to do, and I'd rather say that once than fake a result you'd act on. ## Saving every conversation — live now The gap was real: your global Stop "
-- Files touched: C:/Users/vaish/.claude/skills/gstack/office-hours/sections/design-and-handoff.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/0fa326d2-802f-45f4-944d-bb99a8f49fda/scratchpad/gstack-sketch-agentswarm.html, C:/Users/vaish/.gstack/projects/agent-swarm/vaish-unknown-design-20260729-175656.md, C:/Users/vaish/.gstack/builder-journey.md, C:/Users/vaish/.claude/projects/E--agent-swarm/memory/agent-swarm-design.md, C:/Users/vaish/.claude/projects/E--agent-swarm/memory/user-vaishak-style.md, C:/Users/vaish/.claude/projects/E--agent-swarm/memory/MEMORY.md, C:/Users/vaish/.gstack/projects/agent-swarm/ceo-plans/2026-07-29-agent-swarm-mission-control.md, C:/Users/vaish/.claude/skills/gstack/plan-ceo-review/sections/review-sections.md, C:/Users/vaish/.claude/plans/from-my-perspective-i-iridescent-lampson.md, C:/Users/vaish/.claude/skills/gstack/plan-eng-review/sections/review-sections.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-08-findings-ab5716a7.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-03-findings-af88ae4f.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-05-findings-a969dc43.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-01-gate-graph-a233bd16.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-06-outside-voice-a571ff13.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-04-gate-graph-acd34064.md, C:/Users/vaish/AppData/Local/Temp/claude/E--agent-swarm/ae3a9871-012b-4553-be3c-6b4b72104aa6/scratchpad/wf-result-07-stage2-delta-a208f412.md, C:/Users/vaish/.gstack/projects/agent-swarm/vaish-unknown-design-20260730-cockpit.md, AgentSwarm Vault/.obsidian/app.json (+26 more)
-- Transcript lines: 1318
-- Run `/praxis-save` for a richer, decision-level summary.
 
 _(older entries moved to .praxis/archive/sessions — nothing is lost)_

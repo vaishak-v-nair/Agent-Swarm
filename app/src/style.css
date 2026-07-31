@@ -1,0 +1,115 @@
+:root {
+  --bg: #0c0d10;
+  --bar: #14161b;
+  --line: #23262e;
+  --dim: #7a828f;
+  --fg: #d7dbe2;
+  --accent: #d6547a;
+  --live: #4fa376;
+  --gap: 6px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+#bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 34px;
+  padding: 0 12px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--line);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.brand { font-weight: 600; letter-spacing: .3px; color: var(--accent); }
+.spacer { flex: 1; }
+#hint { color: var(--dim); font-size: 11px; }
+
+#profiles { display: flex; gap: 6px; }
+#profiles button {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  border-radius: 5px;
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+#profiles button:hover { color: var(--fg); border-color: var(--dim); }
+
+/* Auto-tiling: panes fill the space evenly. A cockpit shows everything at once —
+   nested splits hide sessions behind each other, which is the failure being fixed. */
+#grid {
+  height: calc(100% - 34px);
+  display: grid;
+  gap: var(--gap);
+  padding: var(--gap);
+  grid-auto-flow: dense;
+}
+
+.pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #0f1116;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.pane.focus { border-color: var(--accent); }
+.pane.zoom { grid-column: 1 / -1 !important; grid-row: 1 / -1 !important; }
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 9px;
+  background: #12141a;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--dim);
+  user-select: none;
+  -webkit-user-select: none;
+  flex: 0 0 auto;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); flex: 0 0 auto; }
+.dot.dead { background: #5b606b; }
+.head .name { color: var(--fg); }
+.head .x { margin-left: auto; cursor: pointer; padding: 0 3px; }
+.head .x:hover { color: var(--accent); }
+
+.term { flex: 1; min-height: 0; padding: 4px 2px 2px 6px; }
+.xterm { height: 100%; }
+.xterm-viewport::-webkit-scrollbar { width: 9px; }
+.xterm-viewport::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }
+
+#empty {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  font-size: 13px;
+}
+kbd {
+  background: var(--bar);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg);
+}
