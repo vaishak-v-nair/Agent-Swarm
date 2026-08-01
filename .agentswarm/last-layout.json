@@ -3,13 +3,16 @@
   "description": null,
   "panes": [
     {
-      "profile": "node",
+      "profile": "mirror",
       "cwd": "E:\\agent-swarm",
-      "label": "custom",
-      "args": [
-        "--eval",
-        "console.log(1)"
-      ]
+      "label": "reads-claude",
+      "args": []
+    },
+    {
+      "profile": "unknown",
+      "cwd": "E:\\agent-swarm",
+      "label": "no-reader",
+      "args": []
     }
   ]
 }

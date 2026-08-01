@@ -237,13 +237,14 @@ async function spawnPane(p) {
          (p.args.length ? ` args=${JSON.stringify(p.args)}` : ''));
     // The semantic layer is strictly additive: if it never attaches, the terminal
     // above is untouched and fully usable.
-    if (p.profile === 'claude' && p.cwd) {
-      invoke('sem_attach', { id: p.id, cwd: p.cwd })
+    // M12 — the backend decides whether this profile has a session to read.
+    // The frontend used to check for the string 'claude', which is exactly the
+    // hard-wiring this milestone removed.
+    if (p.cwd) {
+      invoke('sem_attach', { id: p.id, cwd: p.cwd, profile: p.profile })
         .catch(e => diag(`sem_attach failed on ${p.id}: ${e}`));
     } else {
-      p.status.textContent = p.profile === 'claude'
-        ? 'no working folder — nothing to correlate'
-        : `plain english needs a claude session (this pane is ${p.profile})`;
+      p.status.textContent = 'no working folder — nothing to correlate';
     }
   } catch (e) {
     p.term.writeln(`\r\n\x1b[31mfailed to start ${p.profile}: ${e}\x1b[0m`);

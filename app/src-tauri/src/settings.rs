@@ -61,7 +61,31 @@ pub struct Profile {
     /// tool you might quit and restart without losing the pane.
     #[serde(default = "yes")]
     pub keep_open: bool,
+    /// M12 — where this agent writes its session record, if it writes one.
+    ///
+    /// The semantic layer used to compute Claude Code's transcript path itself,
+    /// which hard-wired the whole feature to one vendor. A profile now declares
+    /// its own source, and Claude's built-in behaviour is expressed as one of
+    /// these rather than as an exception in the code.
+    #[serde(default)]
+    pub transcript: Option<TranscriptSource>,
 }
+
+/// Where an agent's session record lives, and what shape it is in.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TranscriptSource {
+    /// A directory, with `{home}`, `{cwd}` and `{cwd_slug}` substituted.
+    /// `{cwd_slug}` is the working directory with every non-alphanumeric
+    /// character replaced by a dash — Claude Code's own convention.
+    pub dir: String,
+    /// The only format parsed today is `claude-jsonl`. Anything else is
+    /// accepted, recorded, and reported as unreadable rather than guessed at —
+    /// a wrong reading of somebody's session is worse than no reading.
+    #[serde(default = "claude_jsonl")]
+    pub format: String,
+}
+
+fn claude_jsonl() -> String { "claude-jsonl".into() }
 
 fn yes() -> bool { true }
 

@@ -33,9 +33,18 @@ pub struct Card {
     pub id: String,
 }
 
-/// Claude Code stores transcripts under a directory named after the cwd with
-/// every non-alphanumeric character replaced by a dash.
-pub fn project_dir(cwd: &str) -> Option<PathBuf> {
+/// M12 — resolve a profile's declared transcript directory.
+///
+/// The semantic layer used to compute Claude Code's path itself, which
+/// hard-wired the feature to one vendor. A profile now declares where its agent
+/// writes, and Claude's behaviour is expressed through this same function rather
+/// than as an exception in the code — which is the only honest way to know the
+/// abstraction actually fits.
+///
+/// `{home}` · `{cwd}` · `{cwd_slug}` — the last being the working directory with
+/// every non-alphanumeric character replaced by a dash, Claude Code's own
+/// convention.
+pub fn resolve_dir(template: &str, cwd: &str) -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .ok()?;
@@ -43,7 +52,22 @@ pub fn project_dir(cwd: &str) -> Option<PathBuf> {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect();
-    Some(PathBuf::from(home).join(".claude").join("projects").join(slug))
+    let filled = template
+        .replace("{home}", &home)
+        .replace("{cwd_slug}", &slug)
+        .replace("{cwd}", cwd);
+    if filled.contains('{') {
+        return None; // an unknown placeholder is a typo, not a directory
+    }
+    Some(PathBuf::from(filled))
+}
+
+/// Where Claude Code writes, expressed as the default source rather than as a
+/// special case.
+pub const CLAUDE_DIR: &str = "{home}/.claude/projects/{cwd_slug}";
+
+pub fn project_dir(cwd: &str) -> Option<PathBuf> {
+    resolve_dir(CLAUDE_DIR, cwd)
 }
 
 /// The newest transcript in that directory, ignoring subagent sidechain files.
@@ -547,6 +571,32 @@ mod tests {
     }
 
     #[test]
+    fn claudes_own_path_comes_out_of_the_general_mechanism() {
+        // M12. The abstraction is only real if the built-in case goes through it.
+        // If `project_dir` still computed its own path, a second agent would be
+        // a second special case rather than a second configuration.
+        let via_default = project_dir("E:\\agent-swarm").unwrap();
+        let via_template = resolve_dir(CLAUDE_DIR, "E:\\agent-swarm").unwrap();
+        assert_eq!(via_default, via_template);
+        assert!(via_default.ends_with("E--agent-swarm"), "got {via_default:?}");
+    }
+
+    #[test]
+    fn a_profile_can_point_somewhere_else_entirely() {
+        // what a non-Claude agent's declaration looks like
+        let d = resolve_dir("{cwd}/.sessions", "E:\\work").unwrap();
+        assert!(d.to_string_lossy().contains(".sessions"));
+        assert!(d.to_string_lossy().contains("work"));
+
+        // {home} resolves, and the slug is available separately from the raw cwd
+        let h = resolve_dir("{home}/agent/{cwd_slug}", "E:\\a b").unwrap();
+        assert!(h.to_string_lossy().ends_with("E--a-b"), "got {h:?}");
+
+        // a typo is not silently treated as a literal directory name
+        assert!(resolve_dir("{hme}/x", "E:\\a").is_none());
+    }
+
+    #[test]
     fn maps_a_windows_path_to_its_project_dir() {
         let d = project_dir("E:\\agent-swarm").unwrap();
         assert!(d.ends_with("E--agent-swarm"), "got {d:?}");
@@ -562,16 +612,20 @@ mod tests {
 /// confident false alarms.
 pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str, bool) + Send + 'static>(
     pane: u32,
-    cwd: String,
+    dir: PathBuf,
+    format: String,
     started: SystemTime,
     on_card: F,
     on_status: S,
 ) {
     std::thread::spawn(move || {
-        let Some(dir) = project_dir(&cwd) else {
-            on_status("no transcript directory for this folder", false);
+        // Only one format is parsed. Anything else is reported as unreadable
+        // rather than guessed at — a wrong reading of somebody's session is
+        // worse than no reading, and this is the layer that must never invent.
+        if format != "claude-jsonl" {
+            on_status(&format!("no reader for {format} sessions"), false);
             return;
-        };
+        }
 
         // Attach to the newest transcript straight away so the pane has context
         // immediately, then switch to this pane's own session the moment it

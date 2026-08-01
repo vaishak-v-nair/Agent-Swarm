@@ -203,12 +203,30 @@ fn file_history(cwds: Vec<String>, path: String, limit: Option<usize>) -> Vec<tr
 /// This is separate from pty_spawn on purpose. The terminal must work whether or
 /// not the semantic layer does — understanding is an addition, never a dependency.
 #[tauri::command]
-fn sem_attach(app: AppHandle, id: u32, cwd: String) {
+fn sem_attach(app: AppHandle, id: u32, cwd: String, profile: Option<String>) {
+    // A profile declares where its agent writes. Claude's own location is
+    // expressed through the same mechanism rather than as a special case.
+    let (template, format) = profile
+        .and_then(|p| settings::load(&cwd).settings.profiles.remove(&p))
+        .and_then(|p| p.transcript)
+        .map(|t| (t.dir, t.format))
+        .unwrap_or_else(|| (transcript::CLAUDE_DIR.to_string(), "claude-jsonl".to_string()));
+
+    let Some(dir) = transcript::resolve_dir(&template, &cwd) else {
+        let _ = app.emit("sem:status", Status {
+            pane: id,
+            text: format!("cannot resolve transcript directory \"{template}\""),
+            own: false,
+        });
+        return;
+    };
+
     let a1 = app.clone();
     let a2 = app.clone();
     transcript::watch(
         id,
-        cwd,
+        dir,
+        format,
         std::time::SystemTime::now(),
         move |card| {
             let _ = a1.emit("sem:card", card);
