@@ -28,6 +28,8 @@ const SETTINGS = {
   scrollback: 10000,   // bounded on purpose: unbounded scrollback is the memory leak
   feed_max: 2000,
   restore_layout: true,
+  layout: 'stage',     // 'stage' | 'grid' — stage is the default because a
+                       // readable terminal beats nine unreadable ones
 };
 const panes = new Map();          // id -> { term, fit, el, dot, profile, alive }
 let nextId = 1;
@@ -50,30 +52,89 @@ const THEME = {
 };
 
 /* ── layout ───────────────────────────────────────────────────────────────
-   Panes tile automatically. Columns grow with pane count so nothing is ever
-   hidden behind a tab — seeing every session at once is the point.          */
+   M10. Two layouts over the same panes.
+
+   The grid tiled everything evenly, on the theory that a cockpit should show
+   every session at once. Nine panes on one screen makes nine terminals too
+   small to read, which was the reported problem — and the theory was wrong.
+   Nobody reads nine terminals simultaneously. You read one and monitor the
+   rest, so a uniform grid buys nine unreadable terminals to satisfy a need
+   nobody has.
+
+   Stage gives the pane you are reading the whole room and keeps the others as
+   live cards: state, elapsed, and their most recent line. Awareness survives —
+   that is what the muster rail and the cards are for — and the terminal you are
+   actually reading is full size.
+
+   Panes move between containers. They are never rebuilt, so scrollback,
+   position and process all survive a layout change.                          */
+const board = document.getElementById('board');
+const railEl = document.getElementById('rail');
+const stageEl = document.getElementById('stage');
+const emptyEl = document.getElementById('empty');
+
+let layout = 'grid';   // overridden from settings at boot
+
+const stageActive = () => layout === 'stage' && panes.size > 1;
+
 function relayout() {
   const n = panes.size;
+  board.dataset.layout = n === 0 ? 'empty' : stageActive() ? 'stage' : 'grid';
+
   if (!n) {
-    grid.style.gridTemplateColumns = '1fr';
-    // M8 — the empty state is the first thing a new machine shows. It should
-    // say what the app does, not just that nothing is open.
-    grid.innerHTML =
-      '<div id="empty"><div class="e-title">nothing open</div>' +
+    // M8 — the first thing a new machine shows should say what the app does.
+    emptyEl.innerHTML =
+      '<div class="e-title">nothing open</div>' +
       '<div class="e-row"><kbd>ctrl+shift+P</kbd> everything — swarms, panes, search</div>' +
       '<div class="e-row"><kbd>ctrl+shift+T</kbd> a new pane</div>' +
       '<div class="e-row"><kbd>ctrl+shift+M</kbd> every session in the order it happened</div>' +
-      '<div class="e-row"><kbd>ctrl+shift+D</kbd> what changed, and why</div></div>';
+      '<div class="e-row"><kbd>ctrl+shift+D</kbd> what changed, and why</div>';
     return;
   }
-  document.getElementById('empty')?.remove();
-  const cols = n === 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
-  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-  grid.style.gridTemplateRows = `repeat(${Math.ceil(n / cols)}, minmax(0, 1fr))`;
+
+  if (stageActive()) {
+    for (const p of panes.values()) {
+      const home = p.id === focused ? stageEl : railEl;
+      if (p.el.parentElement !== home) home.appendChild(p.el);
+      p.el.classList.toggle('carded', p.id !== focused);
+    }
+  } else {
+    const cols = n === 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
+    grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+    grid.style.gridTemplateRows = `repeat(${Math.ceil(n / cols)}, minmax(0, 1fr))`;
+    for (const p of panes.values()) {
+      if (p.el.parentElement !== grid) grid.appendChild(p.el);
+      p.el.classList.remove('carded');
+    }
+  }
+
   // rAF, not a microtask: microtasks run BEFORE layout, so fit() would measure
   // a pane that has no size yet and produce a ~1-column terminal. That bug shipped
   // once — every pane rendered a single glyph and swallowed all output.
   requestAnimationFrame(fitAll);
+}
+
+function setLayout(next) {
+  layout = next;
+  relayout();
+  flash(next === 'stage' ? 'stage — one pane at reading size' : 'grid — every pane tiled');
+  diag(`layout: ${next}`);
+}
+
+/** The most recent line a pane actually printed, for its card in the rail.
+ *
+ *  A card showing only a state is a status light; a card showing the last line
+ *  is a glance at the work. Escape sequences are stripped because a card is not
+ *  a terminal — it has no cursor to move and no colours to set. */
+const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][A-Za-z0-9]|\x1b[]][^\x07\x1b]*(\x07|\x1b\\)?|\x1b[=><]|[\x00-\x08\x0b-\x1f\x7f]/g;
+function rememberLastLine(p, chunk) {
+  const clean = chunk.replace(ANSI, '');
+  if (!clean.trim()) return;
+  const lines = clean.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return;
+  const last = lines[lines.length - 1];
+  // A repainting TUI rewrites the same line constantly; only keep a change.
+  if (last !== p.lastLine) p.lastLine = last.slice(0, 160);
 }
 
 const fitAll = () => panes.forEach(p => refit(p));
@@ -243,7 +304,8 @@ async function newPane(profile = 'powershell', opts = {}) {
     `<span class="mode" title="raw output ⇄ plain english (ctrl+shift+E)">raw</span>` +
     `<span class="x" title="close">✕</span></div>` +
     `<div class="term"></div>` +
-    `<div class="flow"><div class="flow-status">watching for a session…</div><div class="cards"></div></div>`;
+    `<div class="flow"><div class="flow-status">watching for a session…</div><div class="cards"></div></div>` +
+    `<div class="peek"></div>`;
   // textContent, not template interpolation: a label comes from a recipe file
   el.querySelector('.name').textContent = label || profile;
   el.querySelector('.name').title = paneCwd || '';
@@ -258,6 +320,7 @@ async function newPane(profile = 'powershell', opts = {}) {
               status: el.querySelector('.flow-status'),
               modeEl: el.querySelector('.mode'),
               stateEl: el.querySelector('.state'),
+              peekEl: el.querySelector('.peek'), lastLine: '',
               sem: false, pinned: true, muted: false,
               // M3 state: tools called but not yet finished, keyed by tool_use id
               pending: new Map(), lastByte: 0, lastCardAt: 0, lastKind: null, bellAt: 0,
@@ -681,6 +744,7 @@ async function loadSettings() {
   try {
     const got = await invoke('load_settings', { cwd: workdir });
     Object.assign(SETTINGS, got.settings);
+    if (SETTINGS.layout === 'stage' || SETTINGS.layout === 'grid') layout = SETTINGS.layout;
     SETTINGS_SOURCE = got.source === 'defaults' ? 'defaults' : 'from file';
     if (got.problem) { diag(`settings problem: ${got.problem}`); flash('settings file is broken — using defaults'); }
     else if (got.source !== 'defaults') diag(`settings from ${got.source}`);
@@ -813,6 +877,8 @@ function actions() {
                   flash(`#${fp.id} ${fp.muted ? 'muted' : 'unmuted'}`);
                 } });
   }
+  list.push({ text: layout === 'stage' ? 'grid  tile every pane' : 'stage  one pane at reading size',
+              hint: 'ctrl+shift+G', run: () => setLayout(layout === 'stage' ? 'grid' : 'stage') });
   list.push({ text: 'zoom this pane', hint: 'ctrl+shift+Z', run: toggleZoom });
   if (focused) list.push({ text: `close pane #${focused}`, hint: 'ctrl+shift+W', run: () => closePane(focused) });
   return list;
@@ -969,6 +1035,9 @@ function tick() {
     p.state = s;
     p.el.dataset.state = s.key;
     p.stateEl.textContent = s.since > 1500 ? `${s.label} · ${fmt(s.since)}` : s.label;
+    if (p.el.classList.contains('carded') && p.peekEl.textContent !== p.lastLine) {
+      p.peekEl.textContent = p.lastLine;
+    }
     if (s.key === 'needs') needs++;
     else if (s.key === 'work') working++;
     // Entering "needs you" is the moment worth a nudge. Staying in it is not —
@@ -1100,6 +1169,8 @@ function focus(id) {
   focused = id;
   panes.forEach(q => q.el.classList.toggle('focus', q.id === id));
   p.el.classList.remove('unseen');
+  // In stage the focused pane IS the layout, so focusing is a layout change.
+  if (stageActive()) relayout();
   if (!p.sem) p.term.focus();
 }
 
@@ -1162,6 +1233,7 @@ listen('pty:data', e => {
   p.bytes += e.payload.data.length;
   p.lastByte = Date.now();
   p.burst += e.payload.data.length;   // throughput, which is what M3 reads as liveness
+  rememberLastLine(p, e.payload.data);
   p.term.write(e.payload.data);
 }).catch(err => diag('FATAL listener[pty:data] denied: ' + err));
 
@@ -1247,6 +1319,7 @@ addEventListener('keydown', e => {
   else if (k === 'm') { hit(); timelineOpen ? closeTimeline() : openTimeline(); }
   else if (k === 'd') { hit(); sheetOpen && sheetKind === 'diff' ? closeSheet() : showChanges(); }
   else if (k === 'f') { hit(); sheetOpen && sheetKind === 'search' ? closeSheet() : showSearch(); }
+  else if (k === 'g') { hit(); setLayout(layout === 'stage' ? 'grid' : 'stage'); }
   // Flip the whole cockpit at once — the "what is everyone doing" view.
   else if (k === 'a') { hit(); const on = ![...panes.values()].every(p => p.sem); panes.forEach(p => setMode(p, on)); }
   else if (e.key === 'ArrowRight') { hit(); cycle(1); }

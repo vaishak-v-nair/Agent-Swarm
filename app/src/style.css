@@ -45,10 +45,20 @@
   --warn:    #c9727f;   /* something is actually broken */
 
   --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
-  --ui:   "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --ui:   "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
 
-  --gap: 5px;
-  --r: 5px;             /* one radius everywhere; mixed radii read as accident */
+  /* M10 reverses an M9 decision, on purpose.
+     M9 made the whole chrome monospaced for instrument feel. The ask was for
+     something smoother, and Apple's own pro tools — Logic, Final Cut — are dark
+     and dense and instrument-like while setting chrome in a proportional face
+     and reserving mono for data. That is the better rule: proportional labels
+     read faster and feel softer; mono stays where alignment carries meaning —
+     elapsed times, counts, paths, diffs, terminal output. */
+  --gap: 8px;
+  --r: 10px;            /* generous, consistent; macOS window radius, not a chip */
+  --r-sm: 6px;
+  --ease: cubic-bezier(.32, .72, 0, 1);   /* the macOS-ish decelerate */
+  --shadow: 0 1px 2px rgba(0,0,0,.28), 0 8px 28px rgba(0,0,0,.34);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -57,10 +67,17 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--fg);
-  font: 12px/1.45 var(--mono);
+  font: 12.5px/1.5 var(--ui);
   font-variant-numeric: tabular-nums;   /* elapsed times must not jitter */
+  letter-spacing: -.005em;
+  -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
+
+/* Data keeps the grid. Everything measured, counted or pathed stays mono so it
+   lines up down the screen; everything read stays proportional. */
+.head .state, .card-ts, .tl-time, .tl-pane, .d-count, .d-path, .why-cite,
+.hit-cite, .a-v, .dl, .diff-text, #tally, .pal-hint { font-family: var(--mono); }
 
 /* ── the top rail ───────────────────────────────────────────────────────── */
 #bar {
@@ -416,4 +433,111 @@ kbd {
    should land inside this guard rather than outside it. */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+}
+
+/* ── M10: stage ───────────────────────────────────────────────────────────
+   The reported problem was that nine panes make nine unreadable terminals.
+   The cause was the premise: a uniform grid assumes you read every session at
+   once. You do not — you read one and monitor the rest.
+
+   Stage gives the pane you are reading the whole room. The others become live
+   cards showing their state, their elapsed time and their most recent line,
+   which is enough to know whether to switch to them. The muster rail above
+   still shows all of them at a glance.                                       */
+#board { height: calc(100% - 30px); position: relative; }
+#board > #grid, #board > #rail, #board > #stage, #board > #empty { display: none; }
+
+#board[data-layout="grid"]  > #grid  { display: grid; height: 100%; }
+#board[data-layout="empty"] > #empty { display: flex; height: 100%; }
+
+#board[data-layout="stage"] {
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  gap: var(--gap);
+  padding: var(--gap);
+}
+#board[data-layout="stage"] > #rail {
+  display: flex; flex-direction: column; gap: var(--gap);
+  min-height: 0; overflow-y: auto; padding-right: 2px;
+}
+#board[data-layout="stage"] > #stage { display: flex; min-width: 0; min-height: 0; }
+#board[data-layout="stage"] > #stage > .pane { flex: 1; }
+
+/* A card is a pane with its terminal folded away. Same element, same process,
+   same scrollback — only the presentation changes, which is why switching is
+   instant and nothing is ever reloaded. */
+.pane.carded {
+  flex: 0 0 auto;
+  cursor: pointer;
+  background: var(--raised);
+  /* A card holds its shape before its session has said anything. Cards that
+     grow from 35px to 50px as output arrives make the rail twitch, which is
+     the ambient motion this design spent M9 removing. */
+  min-height: 58px;
+}
+.pane.carded .term,
+.pane.carded .flow { display: none; }
+.pane.carded .peek { display: block; }
+.pane.carded .head { background: transparent; border-bottom: 0; height: 24px; }
+.pane.carded .mode { display: none; }
+.pane.carded:hover { border-color: var(--line-lit); background: #24252c; }
+
+/* The card's one line of substance: what this session last said. A card with
+   only a status light is a lamp; a card with its last line is a glance at the
+   work. */
+.peek {
+  display: none;
+  padding: 0 10px 9px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--dim);
+  max-height: 3em;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.pane.carded[data-state="needs"] .peek { color: var(--attn); }
+
+/* ── smoother ─────────────────────────────────────────────────────────────
+   The distinction this app makes about motion: animation that *demands
+   attention* is banned — that was the needy pulse M9 removed. Animation that
+   *explains a change* is the opposite, and is why a stage switch does not feel
+   like a page reload. Transitions only, never loops. */
+.pane {
+  transition: background .18s var(--ease), border-color .18s var(--ease),
+              box-shadow .18s var(--ease), transform .18s var(--ease);
+}
+.pane.carded:active { transform: scale(.985); }
+
+.pal-box, .tl-box, .sh-box {
+  box-shadow: var(--shadow);
+  /* Translucent panels over a live cockpit, so context is never fully hidden. */
+  background: rgba(27, 28, 33, .86);
+  backdrop-filter: saturate(150%) blur(22px);
+  -webkit-backdrop-filter: saturate(150%) blur(22px);
+  animation: sheet-in .2s var(--ease);
+}
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(8px) scale(.994); }
+  to   { opacity: 1; transform: none; }
+}
+#palette, #timeline, #sheet { animation: veil-in .16s var(--ease); }
+@keyframes veil-in { from { opacity: 0 } to { opacity: 1 } }
+
+.pal-row, .tl-row, .diff-row, .hit {
+  transition: background .12s var(--ease), box-shadow .12s var(--ease);
+}
+.pal-row { border-radius: var(--r-sm); margin: 0 6px; }
+.pal-row.sel { box-shadow: inset 2px 0 0 var(--adv); }
+.head .mode { border-radius: var(--r-sm); transition: color .15s var(--ease), border-color .15s var(--ease); }
+#profiles button { transition: color .15s var(--ease), border-color .15s var(--ease); border-radius: var(--r-sm); }
+kbd { border-radius: var(--r-sm); }
+
+/* Someone who has asked for less motion gets none, including the transitions
+   above. The guard was already here; now there is something inside it. */
+@media (prefers-reduced-motion: reduce) {
+  *, .pane, .pal-box, .tl-box, .sh-box, #palette, #timeline, #sheet {
+    animation: none !important;
+    transition: none !important;
+  }
 }

@@ -18,6 +18,8 @@ fn d_floor() -> u64 { 800 }
 fn d_scrollback() -> u32 { 10_000 }
 fn d_feed() -> u32 { 2000 }
 fn d_restore() -> bool { true }
+/// Stage by default: one readable terminal beats nine unreadable ones.
+fn d_layout() -> String { "stage".into() }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -34,6 +36,9 @@ pub struct Settings {
     pub feed_max: u32,
     /// Reopen the panes that were open last time, when no swarm was named.
     pub restore_layout: bool,
+    /// "stage" — one pane at reading size, the rest as live cards.
+    /// "grid"  — every pane tiled evenly.
+    pub layout: String,
 }
 
 impl Default for Settings {
@@ -45,6 +50,7 @@ impl Default for Settings {
             scrollback: d_scrollback(),
             feed_max: d_feed(),
             restore_layout: d_restore(),
+            layout: d_layout(),
         }
     }
 }
@@ -113,6 +119,7 @@ mod tests {
         assert_eq!(s.burst_floor, d_floor());
         assert_eq!(s.scrollback, d_scrollback());
         assert!(s.restore_layout);
+        assert_eq!(s.layout, "stage");
     }
 
     #[test]
