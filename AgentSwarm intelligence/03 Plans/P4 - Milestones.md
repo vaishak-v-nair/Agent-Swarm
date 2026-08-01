@@ -77,6 +77,12 @@ Construction sequence — every milestone ships the same product, more finished.
 - [x] `available_profiles` only offers what this machine can actually run
 - [x] Prompted by YC's QM ([[R1 - QM and What It Means For Us]]). Build log: [[B11 - M11 Any Agent]]
 
+## M12 — Not just Claude Code ✅ BUILT 2026-08-01
+- [x] A profile declares where its agent writes: `transcript: { dir, format }`
+- [x] Claude's own path goes through the same mechanism, asserted by test
+- [x] An unreadable format is reported, never guessed at
+- [x] Verified: a non-Claude pane receiving the full semantic layer. Build log: [[B12 - M12 Not Just Claude Code]]
+
 ## What is built, and what is still unproven
 
 Every milestone has shipped. **Four of the five exit tests have not been run**,
@@ -93,6 +99,7 @@ because all of them require using it for real rather than building more:
 - M9 — design and language pass; came from the one source that produces this feedback: somebody looking at it
 - M10 — the grid premise was wrong: you read one session and monitor the rest
 - M11 — a cockpit hard-wired to one vendor was the weaker design all along
+- M12 — the abstraction is only real because the built-in case goes through it
 
 The baseline week started **2026-08-01**. It is the only thing that will settle
 the four open exit tests, and no further building can substitute for it.
