@@ -70,25 +70,122 @@ pub fn project_dir(cwd: &str) -> Option<PathBuf> {
     resolve_dir(CLAUDE_DIR, cwd)
 }
 
-/// The newest transcript in that directory, ignoring subagent sidechain files.
+/// Every `.jsonl` under a directory, to a bounded depth.
+///
+/// Claude Code keeps one flat folder per project. Codex nests by date —
+/// `sessions/2026/05/18/rollout-….jsonl` — so a reader that only looks one level
+/// down finds nothing there. Depth is capped because this runs on a folder the
+/// user named, and an unbounded walk of a mistyped path is a hang.
+fn jsonl_under(dir: &PathBuf, depth: u32, out: &mut Vec<PathBuf>) {
+    if depth == 0 {
+        return;
+    }
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    for e in rd.filter_map(|e| e.ok()) {
+        let p = e.path();
+        if p.is_dir() {
+            jsonl_under(&p, depth - 1, out);
+        } else if p.extension().map(|x| x == "jsonl").unwrap_or(false) {
+            // subagent sidechains are a different conversation, not this one
+            let sidechain = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("agent-"))
+                .unwrap_or(false);
+            if !sidechain {
+                out.push(p);
+            }
+        }
+    }
+}
+
+/// The newest transcript in that directory tree.
 fn newest(dir: &PathBuf) -> Option<PathBuf> {
-    std::fs::read_dir(dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| {
-            p.extension().map(|x| x == "jsonl").unwrap_or(false)
-                && !p
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .map(|n| n.starts_with("agent-"))
-                    .unwrap_or(false)
-        })
-        .max_by_key(|p| {
-            std::fs::metadata(p)
-                .and_then(|m| m.modified())
-                .unwrap_or(SystemTime::UNIX_EPOCH)
-        })
+    let mut found = Vec::new();
+    jsonl_under(dir, 5, &mut found);
+    found.into_iter().max_by_key(|p| {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .unwrap_or(SystemTime::UNIX_EPOCH)
+    })
+}
+
+/// M13 — Codex rollout files.
+///
+/// A second reader is what makes "any agent" true rather than merely possible.
+/// The shapes were learned from real rollouts on this machine, not from docs:
+///
+///   event_msg/user_message          — what the person typed
+///   event_msg/agent_message         — what the agent said
+///   response_item/function_call     — a tool call, with call_id
+///   response_item/function_call_output — its result, same call_id
+///
+/// Everything else — reasoning, token counts, session_meta, turn_context, and
+/// `developer` role messages — is machinery, and is skipped for the same reason
+/// Claude's system reminders are.
+pub fn parse_codex_line(pane: u32, line: &str) -> Vec<Card> {
+    let mut out = Vec::new();
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { return out };
+    let iso = v.get("timestamp").and_then(|t| t.as_str()).unwrap_or_default().to_string();
+    let Some(p) = v.get("payload") else { return out };
+    let kind = p.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+    let card = |k: &str, title: &str, body: String, id: &str| Card {
+        pane,
+        kind: k.into(),
+        title: title.into(),
+        body,
+        iso: iso.clone(),
+        id: id.into(),
+    };
+
+    match kind {
+        "user_message" => {
+            let m = p.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            if !m.trim().is_empty() && !m.starts_with('<') {
+                out.push(card("you", "you", clip(m, 400), ""));
+            }
+        }
+        "agent_message" => {
+            let m = p.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            if !m.trim().is_empty() {
+                // "claude" is the role in this model — the agent speaking — and
+                // the title carries which agent it actually was.
+                out.push(card("claude", "codex", clip(m, 500), ""));
+            }
+        }
+        "function_call" => {
+            let name = p.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+            let id = p.get("call_id").and_then(|c| c.as_str()).unwrap_or("");
+            // `arguments` is JSON encoded inside a JSON string
+            let arg = p
+                .get("arguments")
+                .and_then(|a| a.as_str())
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                .and_then(|j| {
+                    ["cmd", "command", "path", "file_path", "query", "pattern"]
+                        .iter()
+                        .find_map(|k| j.get(*k).and_then(|x| x.as_str()).map(str::to_string))
+                })
+                .unwrap_or_default();
+            out.push(card("tool", name, clip(&arg, 200), id));
+        }
+        "function_call_output" => {
+            let id = p.get("call_id").and_then(|c| c.as_str()).unwrap_or("");
+            let body = p.get("output").and_then(|o| o.as_str()).unwrap_or("");
+            out.push(card("result", "result", clip(body, 240), id));
+        }
+        _ => {}
+    }
+    out
+}
+
+/// Read one line in whichever format the profile declared.
+fn parse_in(format: &str, pane: u32, line: &str) -> Vec<Card> {
+    match format {
+        "codex-rollout" => parse_codex_line(pane, line),
+        _ => parse_line(pane, line),
+    }
 }
 
 /// Where to start reading a transcript we did not create. A long-running session
@@ -720,7 +817,7 @@ pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str, bool) + Send + 'static>(
         // Only one format is parsed. Anything else is reported as unreadable
         // rather than guessed at — a wrong reading of somebody's session is
         // worse than no reading, and this is the layer that must never invent.
-        if format != "claude-jsonl" {
+        if !matches!(format.as_str(), "claude-jsonl" | "codex-rollout") {
             on_status(&format!("no reader for {format} sessions"), false);
             return;
         }
@@ -790,7 +887,7 @@ pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str, bool) + Send + 'static>(
                                     pos -= n as u64;
                                     break;
                                 }
-                                for c in parse_line(pane, &line) {
+                                for c in parse_in(&format, pane, &line) {
                                     on_card(c);
                                 }
                             }
@@ -802,4 +899,49 @@ pub fn watch<F: Fn(Card) + Send + 'static, S: Fn(&str, bool) + Send + 'static>(
             std::thread::sleep(Duration::from_millis(400));
         }
     });
+}
+
+#[cfg(test)]
+mod codex_tests {
+    use super::parse_codex_line;
+
+    // Shapes copied from a real rollout on this machine, not from documentation.
+    #[test]
+    fn reads_the_four_shapes_that_carry_meaning() {
+        let you = parse_codex_line(1, r#"{"timestamp":"2026-05-18T14:52:12.486Z","type":"event_msg","payload":{"type":"user_message","message":"Change the start command"}}"#);
+        assert_eq!(you.len(), 1);
+        assert_eq!((you[0].kind.as_str(), you[0].title.as_str()), ("you", "you"));
+        assert_eq!(you[0].iso, "2026-05-18T14:52:12.486Z");
+
+        // the agent speaking is the same role as Claude speaking; the title says
+        // which agent it was
+        let said = parse_codex_line(1, r#"{"timestamp":"t","type":"event_msg","payload":{"type":"agent_message","message":"I'm checking the deployment files."}}"#);
+        assert_eq!((said[0].kind.as_str(), said[0].title.as_str()), ("claude", "codex"));
+
+        // arguments are JSON inside a JSON string
+        let call = parse_codex_line(1, r#"{"timestamp":"t","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"call_x","arguments":"{\"cmd\":\"rg -n foo\",\"yield_time_ms\":1000}"}}"#);
+        assert_eq!(call[0].kind, "tool");
+        assert_eq!(call[0].title, "exec_command");
+        assert_eq!(call[0].body, "rg -n foo");
+        assert_eq!(call[0].id, "call_x");
+
+        // the result carries the same call_id, which is what closes the call
+        let outp = parse_codex_line(1, r#"{"timestamp":"t","type":"response_item","payload":{"type":"function_call_output","call_id":"call_x","output":"done"}}"#);
+        assert_eq!((outp[0].kind.as_str(), outp[0].id.as_str()), ("result", "call_x"));
+    }
+
+    #[test]
+    fn skips_machinery_and_survives_junk() {
+        for line in [
+            r#"{"type":"event_msg","payload":{"type":"token_count","info":{}}}"#,
+            r#"{"type":"response_item","payload":{"type":"reasoning","summary":[]}}"#,
+            r#"{"type":"session_meta","payload":{"id":"x"}}"#,
+            r#"{"type":"turn_context","payload":{"cwd":"e:/x"}}"#,
+            r#"{"type":"event_msg","payload":{"type":"user_message","message":"<permissions instructions>..."}}"#,
+            "not json",
+            "{}",
+        ] {
+            assert!(parse_codex_line(1, line).is_empty(), "should skip: {line}");
+        }
+    }
 }
