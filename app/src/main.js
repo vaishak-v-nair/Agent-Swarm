@@ -124,7 +124,7 @@ async function newPane(profile = 'powershell', opts = {}) {
               status: el.querySelector('.flow-status'),
               modeEl: el.querySelector('.mode'),
               stateEl: el.querySelector('.state'),
-              sem: false, pinned: true,
+              sem: false, pinned: true, muted: false,
               // M3 state: tools called but not yet finished, keyed by tool_use id
               pending: new Map(), lastByte: 0, lastCardAt: 0, lastKind: null, bellAt: 0,
               burst: 0, quietSince: 0,
@@ -238,8 +238,16 @@ function sendTo(id, text) {
 }
 
 function broadcast(text) {
-  const targets = [...panes.values()].filter(p => p.alive && p.profile === 'claude');
-  if (!targets.length) { flash('no claude panes to broadcast to'); return; }
+  // A muted pane stays out of it. Broadcast is the one action here that touches
+  // every agent at once, so there has to be a way to keep one out without
+  // closing it — a reviewer running under a read-only policy should not be
+  // handed the same instruction as the pane doing the work.
+  const targets = [...panes.values()].filter(p => p.alive && p.profile === 'claude' && !p.muted);
+  if (!targets.length) {
+    const muted = [...panes.values()].filter(p => p.alive && p.profile === 'claude' && p.muted).length;
+    flash(muted ? `every claude pane is muted (${muted})` : 'no claude panes to broadcast to');
+    return;
+  }
   targets.forEach(p => sendTo(p.id, text));
   flash(`sent to ${targets.length} pane${targets.length > 1 ? 's' : ''}`);
   diag(`broadcast to ${targets.length} pane(s): ${text.slice(0, 80)}`);
@@ -324,12 +332,18 @@ async function showDiff(cwd, f) {
   back.textContent = '← all changes';
   back.addEventListener('click', showChanges);
 
-  let text = '';
-  try { text = await invoke('git_file_diff', { cwd, path: f.path, untracked: !!f.untracked }); }
-  catch (e) { text = `could not read the diff: ${e}`; }
+  // The diff and the reason for it, fetched together. A diff says what changed;
+  // the transcript says why, and the second is the harder question.
+  const [text, why] = await Promise.all([
+    invoke('git_file_diff', { cwd, path: f.path, untracked: !!f.untracked })
+      .catch(e => `could not read the diff: ${e}`),
+    invoke('file_history', { cwds: paneCwds(), path: f.path, limit: 40 })
+      .catch(e => { diag(`file_history failed: ${e}`); return []; }),
+  ]);
 
   body.textContent = '';
   body.appendChild(back);
+  body.appendChild(renderWhy(why));
   const pre = document.createElement('div');
   pre.className = 'diff-text';
   for (const line of text.split('\n')) {
@@ -348,6 +362,55 @@ async function showDiff(cwd, f) {
    Panes are live; transcripts outlast them. This is the only way to answer
    "what did I decide about this", and every hit is quoted with the file and
    line it came from — an answer you can check rather than one you must trust. */
+/* M6 — why is this file the way it is.
+ *
+ * `git blame` answers "who and when" for a line. It cannot answer "why", because
+ * the reason was never in the repository — it was in the conversation. Every edit
+ * in a transcript names the file it wrote, and what was being said just before it
+ * is the reason it happened.
+ *
+ * This reads all history, so a file changed in a session that ended last week
+ * still has an answer. The changed-files list uses the live feed instead, which
+ * is instant but only sees panes open right now; the difference is deliberate,
+ * because "why" is asked about one file at a time. */
+function renderWhy(hits) {
+  const box = document.createElement('div');
+  box.className = 'why';
+
+  const head = document.createElement('div');
+  head.className = 'why-head';
+  head.textContent = hits.length
+    ? `why — ${hits.length} edit${hits.length > 1 ? 's' : ''} across all history`
+    : 'why — no agent edit of this file found in any transcript';
+  box.appendChild(head);
+  if (!hits.length) return box;
+
+  // Consecutive edits driven by the same explanation are one decision, not five.
+  let lastReason = null;
+  for (const h of hits) {
+    const reason = (h.context || '').trim();
+    const row = document.createElement('div');
+    row.className = 'why-row';
+
+    if (reason && reason !== lastReason) {
+      const r = document.createElement('div');
+      r.className = 'why-reason';
+      r.textContent = reason;
+      row.appendChild(r);
+      lastReason = reason;
+    }
+    const cite = document.createElement('div');
+    cite.className = 'why-cite';
+    const when = h.iso ? new Date(h.iso) : null;
+    cite.textContent =
+      `⚙ ${h.title}  ·  ${h.session}:${h.line}` +
+      (when && !isNaN(when) ? `  ·  ${when.toLocaleString()}` : '');
+    row.appendChild(cite);
+    box.appendChild(row);
+  }
+  return box;
+}
+
 async function showSearch(initial = '') {
   openSheet('search', 'search everything', paneCwds().join('  ·  '));
   const body = document.getElementById('sh-body');
@@ -554,9 +617,18 @@ function actions() {
   list.push({ text: 'changes  what actually changed on disk', hint: 'ctrl+shift+D', run: showChanges });
   list.push({ text: 'search  everything ever said here', hint: 'ctrl+shift+F', run: () => showSearch() });
   const claudePanes = [...panes.values()].filter(p => p.alive && p.profile === 'claude');
+  const willGet = claudePanes.filter(p => !p.muted);
   if (claudePanes.length) {
-    list.push({ text: `broadcast  to every claude pane`, hint: `${claudePanes.length} pane${claudePanes.length > 1 ? 's' : ''}`,
-                ask: 'what to send to every claude pane', run: broadcast });
+    // Do not ask for a message nobody will receive. Typing a paragraph and
+    // watching it evaporate is a worse way to learn that every pane is muted.
+    list.push(willGet.length
+      ? { text: 'broadcast  to every claude pane',
+          hint: `${willGet.length} of ${claudePanes.length}`,
+          ask: `what to send to ${willGet.length} pane${willGet.length === 1 ? '' : 's'}`,
+          run: broadcast }
+      : { text: 'broadcast  — every claude pane is muted',
+          hint: `0 of ${claudePanes.length}`,
+          run: () => flash(`unmute a pane first — all ${claudePanes.length} are muted`) });
   }
   for (const t of claudePanes) {
     list.push({ text: `send  to #${t.id} ${t.label || t.profile}`, hint: t.cwd || '',
@@ -567,6 +639,16 @@ function actions() {
   list.push({ text: 'jump to what needs me', hint: 'ctrl+shift+space', run: jumpToNeedy });
   list.push({ text: 'plain english  this pane', hint: 'ctrl+shift+E', run: () => { const p = panes.get(focused); if (p) setMode(p, !p.sem); } });
   list.push({ text: 'plain english  every pane', hint: 'ctrl+shift+A', run: toggleAllModes });
+  const fp = panes.get(focused);
+  if (fp && fp.profile === 'claude') {
+    list.push({ text: fp.muted ? `unmute  #${fp.id} for broadcast` : `mute  #${fp.id} from broadcast`,
+                hint: fp.muted ? 'currently muted' : '',
+                run: () => {
+                  fp.muted = !fp.muted;
+                  fp.el.classList.toggle('muted', fp.muted);
+                  flash(`#${fp.id} ${fp.muted ? 'muted' : 'unmuted'}`);
+                } });
+  }
   list.push({ text: 'zoom this pane', hint: 'ctrl+shift+Z', run: toggleZoom });
   if (focused) list.push({ text: `close pane #${focused}`, hint: 'ctrl+shift+W', run: () => closePane(focused) });
   return list;

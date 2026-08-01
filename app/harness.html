@@ -78,6 +78,18 @@
                 body: 'Structure comes from the transcript, never from scraping the terminal.', cwd: CWD },
             ]);
 
+          case 'file_history':
+            return Promise.resolve([
+              { session: '7e015ca2.jsonl', line: 1765, iso: '2026-07-31T17:27:00Z',
+                kind: 'tool', title: 'Write', body: payload.path, cwd: CWD,
+                context: 'The state machine is the risky part of M3 — extracting it so it can be tested rather than assumed.' },
+              { session: '7e015ca2.jsonl', line: 1827, iso: '2026-07-31T17:43:00Z',
+                kind: 'tool', title: 'Edit', body: payload.path, cwd: CWD,
+                context: 'Now the state machine must refuse to infer from a transcript that is not the pane own.' },
+              { session: '7e015ca2.jsonl', line: 1832, iso: '2026-07-31T17:43:00Z',
+                kind: 'tool', title: 'Edit', body: payload.path, cwd: CWD,
+                context: 'Now the state machine must refuse to infer from a transcript that is not the pane own.' },
+            ]);
           case 'list_recipes':
             return Promise.resolve({
               problems: [],

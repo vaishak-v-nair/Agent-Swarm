@@ -369,6 +369,25 @@ html, body {
 .dl.hunk { color: #b98ad6; }
 .dl.meta { color: #5b606b; }
 
+/* ── M6: why is this file the way it is ───────────────────────────────────
+   git blame answers who and when. It cannot answer why, because the reason was
+   never in the repository — it was in the conversation. This sits above the
+   diff because it is the part you actually came for.                         */
+.why { margin: 4px 14px 10px; padding: 9px 12px; background: #0f1116;
+       border: 1px solid var(--line); border-radius: 7px; }
+.why-head { font-size: 10px; color: var(--accent); letter-spacing: .4px;
+            text-transform: lowercase; margin-bottom: 6px; }
+.why-row { padding: 4px 0 5px 10px; border-left: 2px solid #2b2f38; margin-bottom: 4px; }
+.why-reason { font-size: 12px; line-height: 1.5; color: var(--fg); margin-bottom: 3px; }
+.why-cite { font-size: 10px; color: #5b606b;
+            font-family: "Cascadia Mono", Consolas, monospace; }
+
+/* A pane deliberately kept out of broadcast. Visibly different, because being
+   surprised that a pane did not receive an instruction is worse than the
+   inconvenience of muting it. */
+.pane.muted .head { background: #16121a; }
+.pane.muted .name::after { content: ' · muted'; color: #b98ad6; font-size: 10px; }
+
 /* search hits — the citation is not decoration, it is the product */
 .hit { padding: 8px 14px 9px; border-left: 2px solid var(--line); margin: 0 0 2px 12px; }
 .hit-body { font-size: 12px; line-height: 1.5; color: var(--fg); }

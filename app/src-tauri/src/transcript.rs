@@ -254,6 +254,10 @@ pub struct Hit {
     /// Which of the searched folders this came from, so results from several
     /// panes stay tellable apart.
     pub cwd: String,
+    /// What was being said immediately before this happened. Empty for a plain
+    /// search; filled by `touched_by`, where the reason is the whole point — a
+    /// tool call on its own tells you a file was written, not why.
+    pub context: String,
 }
 
 /// Search every transcript under each folder for a phrase.
@@ -264,27 +268,22 @@ pub struct Hit {
 ///
 /// Matching is plain case-insensitive substring. Not fuzzy: when the answer is
 /// going to be quoted back with a citation, a hit needs to be a hit.
-pub fn search(cwds: &[String], query: &str, limit: usize) -> Vec<Hit> {
-    let needle = query.trim().to_lowercase();
-    if needle.is_empty() {
-        return Vec::new();
-    }
-
-    let mut hits: Vec<Hit> = Vec::new();
-    let mut seen_dirs: Vec<PathBuf> = Vec::new();
-
+/// Every transcript file under each folder, newest first, with its folder.
+/// Recent decisions are the ones being asked about.
+fn transcripts(cwds: &[String]) -> Vec<(String, PathBuf)> {
+    let mut out = Vec::new();
+    let mut seen: Vec<PathBuf> = Vec::new();
     for cwd in cwds {
         let Some(dir) = project_dir(cwd) else { continue };
-        if seen_dirs.contains(&dir) {
+        if seen.contains(&dir) {
             continue; // several panes in one folder share a transcript directory
         }
-        seen_dirs.push(dir.clone());
+        seen.push(dir.clone());
 
         let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
             .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path()).collect())
             .unwrap_or_default();
         files.retain(|p| p.extension().map(|e| e == "jsonl").unwrap_or(false));
-        // newest first: recent decisions are the ones being asked about
         files.sort_by_key(|p| {
             std::cmp::Reverse(
                 std::fs::metadata(p)
@@ -292,36 +291,147 @@ pub fn search(cwds: &[String], query: &str, limit: usize) -> Vec<Hit> {
                     .unwrap_or(SystemTime::UNIX_EPOCH),
             )
         });
+        for f in files {
+            out.push((cwd.clone(), f));
+        }
+    }
+    out
+}
 
-        for path in files {
-            let Ok(text) = std::fs::read_to_string(&path) else { continue };
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
+fn file_name(p: &PathBuf) -> String {
+    p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+}
 
-            for (i, line) in text.lines().enumerate() {
-                // cheap reject before the parse — most lines match nothing
-                if !line.to_lowercase().contains(&needle) {
-                    continue;
+/// Tools that write to a file. A pane "touched" a file if one of these named it.
+const EDITORS: &[&str] = &["Write", "Edit", "MultiEdit", "NotebookEdit", "Update"];
+
+/// M6 — the conversation that changed a file.
+///
+/// This is the question a diff cannot answer and a git blame answers badly:
+/// *why is this line here.* Every edit in a transcript names the file it wrote,
+/// so the edits can be found — and what was being said just before each one is
+/// the reason it happened.
+///
+/// Unlike the live attribution in the cockpit, this reads **all** history, so a
+/// file edited in a session that ended last week still has an owner and a reason.
+pub fn touched_by(cwds: &[String], path: &str, limit: usize) -> Vec<Hit> {
+    // Match on the tail, because a transcript records an absolute path and the
+    // caller usually has one relative to the repo root.
+    let tail = path.replace('\\', "/").trim_start_matches("./").to_lowercase();
+    if tail.is_empty() {
+        return Vec::new();
+    }
+
+    let mut hits = Vec::new();
+    for (cwd, file) in transcripts(cwds) {
+        let Ok(text) = std::fs::read_to_string(&file) else { continue };
+        let name = file_name(&file);
+        // what was being said as we walked; the reason for the edit that follows
+        let mut said = String::new();
+
+        for (i, line) in text.lines().enumerate() {
+            for c in parse_line(0, line) {
+                match c.kind.as_str() {
+                    "claude" | "you" => said = c.body.clone(),
+                    "tool" if EDITORS.contains(&c.title.as_str()) => {
+                        let wrote = c.body.replace('\\', "/").to_lowercase();
+                        if wrote.ends_with(&tail) || tail.ends_with(&wrote) {
+                            hits.push(Hit {
+                                session: name.clone(),
+                                line: i as u32 + 1,
+                                iso: c.iso.clone(),
+                                kind: "tool".into(),
+                                title: c.title.clone(),
+                                body: c.body.clone(),
+                                cwd: cwd.clone(),
+                                context: said.clone(),
+                            });
+                            if hits.len() >= limit {
+                                return hits;
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                for c in parse_line(0, line) {
-                    let hay = format!("{} {}", c.title, c.body).to_lowercase();
-                    if !hay.contains(&needle) {
-                        continue; // the phrase was in metadata, not in what was said
-                    }
-                    hits.push(Hit {
-                        session: name.clone(),
-                        line: i as u32 + 1,
-                        iso: c.iso,
-                        kind: c.kind,
-                        title: c.title,
-                        body: c.body,
-                        cwd: cwd.clone(),
-                    });
-                    if hits.len() >= limit {
-                        return hits;
-                    }
+            }
+        }
+    }
+    hits
+}
+
+/// Split a query into the words that must all appear. Quoting a phrase keeps it
+/// whole: `"permission mode"` matches those two words adjacent, not separately.
+fn terms(query: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quoted = false;
+    for ch in query.chars() {
+        match ch {
+            '"' => {
+                quoted = !quoted;
+                if !quoted && !cur.trim().is_empty() {
+                    out.push(cur.trim().to_lowercase());
+                    cur.clear();
+                }
+            }
+            c if c.is_whitespace() && !quoted => {
+                if !cur.trim().is_empty() {
+                    out.push(cur.trim().to_lowercase());
+                    cur.clear();
+                }
+            }
+            c => cur.push(c),
+        }
+    }
+    if !cur.trim().is_empty() {
+        out.push(cur.trim().to_lowercase());
+    }
+    out
+}
+
+pub fn search(cwds: &[String], query: &str, limit: usize) -> Vec<Hit> {
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() {
+        return Vec::new();
+    }
+
+    // Every word must appear, not just one. "permission mode" was matching
+    // everything that mentioned either, which buries the answer you wanted under
+    // hundreds of near misses — the failure mode that makes a search feel broken
+    // even though it is technically working.
+    let words = terms(&needle);
+    if words.is_empty() {
+        return Vec::new();
+    }
+
+    let mut hits: Vec<Hit> = Vec::new();
+    for (cwd, path) in transcripts(cwds) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let name = file_name(&path);
+
+        for (i, line) in text.lines().enumerate() {
+            // cheap reject before the parse — most lines match nothing
+            let lower = line.to_lowercase();
+            if !words.iter().all(|w| lower.contains(w)) {
+                continue;
+            }
+            for c in parse_line(0, line) {
+                let hay = format!("{} {}", c.title, c.body).to_lowercase();
+                if !words.iter().all(|w| hay.contains(w)) {
+                    continue; // the words were in metadata, not in what was said
+                }
+                hits.push(Hit {
+                    session: name.clone(),
+                    line: i as u32 + 1,
+                    iso: c.iso,
+                    kind: c.kind,
+                    title: c.title,
+                    body: c.body,
+                    cwd: cwd.clone(),
+                    context: String::new(),
+                });
+                if hits.len() >= limit {
+                    return hits;
                 }
             }
         }
@@ -422,6 +532,18 @@ mod tests {
         assert!(none(r#"{"message":{"role":"user","content":"<task-notification><task-id>x</task-id></task-notification>"}}"#));
         assert!(none(r#"{"message":{"role":"user","content":"<command-name>  </command-name>"}}"#));
         assert!(none(r#"{"message":{"role":"user","content":"<command-name>unclosed"}}"#));
+    }
+
+    #[test]
+    fn a_query_splits_into_words_that_must_all_appear() {
+        assert_eq!(terms("permission mode"), vec!["permission", "mode"]);
+        assert_eq!(terms("  spaced   out  "), vec!["spaced", "out"]);
+        // a quoted phrase stays whole, so it matches adjacent words only
+        assert_eq!(terms("\"permission mode\""), vec!["permission mode"]);
+        assert_eq!(terms("why \"child session\" broke"), vec!["why", "child session", "broke"]);
+        // an unclosed quote is still a usable phrase rather than an error
+        assert_eq!(terms("\"unclosed phrase"), vec!["unclosed phrase"]);
+        assert!(terms("   ").is_empty());
     }
 
     #[test]

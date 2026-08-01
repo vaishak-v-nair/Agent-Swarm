@@ -128,6 +128,16 @@ fn search_history(cwds: Vec<String>, query: String, limit: Option<usize>) -> Vec
     transcript::search(&cwds, &query, limit.unwrap_or(60))
 }
 
+/// M6. The conversation that changed a file.
+///
+/// A diff says what is different. This says why — the edits that produced it and
+/// what was being said just before each one, across all history rather than only
+/// the sessions this app happened to have open.
+#[tauri::command]
+fn file_history(cwds: Vec<String>, path: String, limit: Option<usize>) -> Vec<transcript::Hit> {
+    transcript::touched_by(&cwds, &path, limit.unwrap_or(40))
+}
+
 /// M2. Attach the semantic layer to a pane: watch the Claude Code transcript for
 /// this folder and stream structured cards alongside the raw terminal.
 ///
@@ -247,6 +257,7 @@ pub fn run() {
             git_changes,
             git_file_diff,
             search_history,
+            file_history,
             startup_swarm,
             set_attention,
             diag
