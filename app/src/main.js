@@ -51,8 +51,14 @@ function relayout() {
   const n = panes.size;
   if (!n) {
     grid.style.gridTemplateColumns = '1fr';
+    // M8 — the empty state is the first thing a new machine shows. It should
+    // say what the app does, not just that nothing is open.
     grid.innerHTML =
-      '<div id="empty">no sessions — <kbd>ctrl+shift+T</kbd> or pick a profile above</div>';
+      '<div id="empty"><div class="e-title">nothing open</div>' +
+      '<div class="e-row"><kbd>ctrl+shift+P</kbd> everything — swarms, panes, search</div>' +
+      '<div class="e-row"><kbd>ctrl+shift+T</kbd> a new pane</div>' +
+      '<div class="e-row"><kbd>ctrl+shift+M</kbd> every session in the order it happened</div>' +
+      '<div class="e-row"><kbd>ctrl+shift+D</kbd> what changed, and why</div></div>';
     return;
   }
   document.getElementById('empty')?.remove();
@@ -639,6 +645,32 @@ let recipes = [];
 let profiles = ['powershell'];
 let SETTINGS_SOURCE = 'defaults';
 
+/** M8 — what this is and where it keeps things. On an unfamiliar machine the
+ *  first question is "where does this store my stuff", and the answer should not
+ *  require reading the source. */
+async function showAbout() {
+  let info = {};
+  try { info = await invoke('about'); } catch (e) { diag(`about failed: ${e}`); }
+  openSheet('about', `AgentSwarm ${info.version || ''}`, 'the terminal built for agentic coding');
+  const body = document.getElementById('sh-body');
+  const rows = [
+    ['working folder', info.cwd],
+    ['config', `${info.config_dir || ''} — recipes.json, settings.json, last-layout.json`],
+    ['thresholds', SETTINGS_SOURCE === 'defaults' ? 'defaults (no settings.json yet)' : 'from settings.json'],
+    ['transcripts read from', info.transcripts],
+    ['recipes loaded', recipes.length ? recipes.map(r => r.name).join(', ') : 'none'],
+    ['panes open', String(panes.size)],
+  ];
+  for (const [k, v] of rows) {
+    const d = document.createElement('div');
+    d.className = 'about-row';
+    d.innerHTML = '<span class="a-k"></span><span class="a-v"></span>';
+    d.querySelector('.a-k').textContent = k;
+    d.querySelector('.a-v').textContent = v || '—';
+    body.appendChild(d);
+  }
+}
+
 async function loadSettings() {
   if (!workdir) return;
   try {
@@ -766,6 +798,7 @@ function actions() {
                 run: () => restartPane(d.id) });
   }
   list.push({ text: 'settings  edit the thresholds', hint: SETTINGS_SOURCE, run: openSettingsFile });
+  list.push({ text: 'about  version and where things live', run: showAbout });
   if (fp && fp.profile === 'claude') {
     list.push({ text: fp.muted ? `unmute  #${fp.id} for broadcast` : `mute  #${fp.id} from broadcast`,
                 hint: fp.muted ? 'currently muted' : '',
@@ -1198,6 +1231,13 @@ let workdir = null;
   if (profiles.includes('claude')) defaultProfile = 'claude';
   try { workdir = await invoke('default_cwd'); } catch { /* panes inherit instead */ }
   await loadSettings();
+  // A first run finds no recipes, so the palette's headline feature looks empty
+  // and the app appears to do less than it does. A starter file also teaches the
+  // format better than documentation would.
+  try {
+    const seeded = await invoke('seed_first_run', { cwd: workdir });
+    if (seeded) { diag(`first run — wrote a starter recipe to ${seeded}`); flash('first run — starter recipe written'); }
+  } catch (e) { diag(`seed failed: ${e}`); }
   await refreshRecipes();
 
   const bar = document.getElementById('profiles');

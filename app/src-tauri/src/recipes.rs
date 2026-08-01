@@ -132,6 +132,47 @@ pub fn save(cwd: &str, recipe: Recipe) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+/// M8 — what a first run should find.
+///
+/// On a machine that has never run AgentSwarm there are no recipes, so the
+/// palette's headline feature is an empty list and the app looks like it does
+/// less than it does. Writing a starter file is not decoration: a recipe you can
+/// read and edit teaches the format in a way no documentation does.
+///
+/// Never overwrites. If a recipes file exists at all, the user has already met
+/// this feature and their file is the authority.
+pub fn seed_if_absent(cwd: &str, profiles: &[String]) -> Option<String> {
+    let path = project_file(cwd);
+    if path.exists() || home_file().map(|h| h.exists()).unwrap_or(false) {
+        return None;
+    }
+    let dir = path.parent()?;
+    std::fs::create_dir_all(dir).ok()?;
+
+    // Only offer what this machine can actually launch. A starter recipe that
+    // fails on first use is worse than no starter recipe.
+    let agent = if profiles.iter().any(|p| p == "claude") { "claude" } else { "powershell" };
+    let shell = if profiles.iter().any(|p| p == "pwsh") { "pwsh" } else { "powershell" };
+
+    let book = Book {
+        recipes: vec![
+            Recipe {
+                name: "morning".into(),
+                description: Some("edit me — the panes you want open together".into()),
+                panes: vec![
+                    RecipePane { profile: agent.into(), cwd: Some(cwd.into()),
+                                 label: Some("work".into()), args: vec![] },
+                    RecipePane { profile: shell.into(), cwd: Some(cwd.into()),
+                                 label: Some("shell".into()), args: vec![] },
+                ],
+            },
+        ],
+    };
+    let text = serde_json::to_string_pretty(&book).ok()?;
+    std::fs::write(&path, text).ok()?;
+    Some(path.display().to_string())
+}
+
 fn layout_file(cwd: &str) -> PathBuf {
     PathBuf::from(cwd).join(".agentswarm").join("last-layout.json")
 }
@@ -283,6 +324,31 @@ mod tests {
 
         // a layout is not a recipe and must never show up in the recipe list
         assert!(load(&cwd).recipes.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_first_run_gets_a_recipe_it_can_actually_launch() {
+        let dir = std::env::temp_dir().join("agentswarm-seed-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cwd = dir.to_string_lossy().to_string();
+
+        // a machine without claude must not be handed a claude recipe
+        let path = seed_if_absent(&cwd, &["powershell".to_string(), "cmd".to_string()]);
+        assert!(path.is_some(), "a first run should get a starter recipe");
+        let seeded = load(&cwd);
+        assert_eq!(seeded.recipes.len(), 1);
+        assert!(seeded.problems.is_empty());
+        for pane in &seeded.recipes[0].panes {
+            assert_ne!(pane.profile, "claude", "never seed a profile this machine lacks");
+        }
+
+        // and it is never written twice — the user's file is the authority
+        std::fs::write(project_file(&cwd), r#"{"recipes":[]}"#).unwrap();
+        assert!(seed_if_absent(&cwd, &["claude".to_string()]).is_none());
+        assert!(load(&cwd).recipes.is_empty(), "the user's empty file must survive");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

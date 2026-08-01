@@ -106,6 +106,30 @@ fn save_recipe(cwd: String, recipe: recipes::Recipe) -> Result<String, String> {
     recipes::save(&cwd, recipe).map(|p| p.to_string_lossy().to_string())
 }
 
+/// M8. Give a first run something to find. Returns the path if one was written.
+#[tauri::command]
+fn seed_first_run(cwd: String) -> Option<String> {
+    recipes::seed_if_absent(&cwd, &available_profiles())
+}
+
+/// M8. What this is and where it keeps things, for the about entry.
+#[tauri::command]
+fn about() -> serde_json::Value {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    // Paths are built here, with PathBuf, and never assembled from separators in
+    // a JavaScript string literal. Backslashes in JS literals have been mangled
+    // repeatedly in this codebase — an escaped separator is a bug waiting to
+    // happen, and the side that owns paths should hand over finished ones.
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "cwd": cwd.to_string_lossy(),
+        "config_dir": cwd.join(".agentswarm").to_string_lossy(),
+        "transcripts": transcript::project_dir(&cwd.to_string_lossy())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default(),
+    })
+}
+
 /// M7. The thresholds, and where they came from.
 #[tauri::command]
 fn load_settings(cwd: String) -> settings::Loaded {
@@ -283,6 +307,8 @@ pub fn run() {
             git_file_diff,
             search_history,
             file_history,
+            seed_first_run,
+            about,
             load_settings,
             write_settings_template,
             save_layout,

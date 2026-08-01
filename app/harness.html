@@ -106,6 +106,17 @@
               { profile: 'claude', cwd: CWD, label: 'restored-a', args: [] },
               { profile: 'powershell', cwd: CWD, label: 'restored-b', args: [] },
             ] : []);
+          case 'seed_first_run':
+            return Promise.resolve(new URLSearchParams(location.search).has('firstrun')
+              ? CWD + '\\.agentswarm\\recipes.json' : null);
+          case 'about':
+            // Rust hands over finished paths; the UI never joins separators itself.
+            return Promise.resolve({
+              version: '0.1.0',
+              cwd: CWD,
+              config_dir: CWD + '\\.agentswarm',
+              transcripts: 'C:\\Users\\you\\.claude\\projects\\E--agent-swarm',
+            });
           case 'list_recipes':
             return Promise.resolve({
               problems: [],

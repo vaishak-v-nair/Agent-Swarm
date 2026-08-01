@@ -421,3 +421,19 @@ kbd {
   font-size: 11px;
   color: var(--fg);
 }
+
+/* ── M8: the first thing a new machine shows ─────────────────────────────
+   An empty cockpit used to say only that it was empty. On an unfamiliar
+   machine that is the whole first impression, so it teaches instead.       */
+#empty { flex-direction: column; gap: 7px; }
+.e-title { color: var(--fg); font-size: 14px; margin-bottom: 6px; }
+.e-row { color: var(--dim); font-size: 12px; }
+.e-row kbd { margin-right: 8px; }
+
+.about-row {
+  display: grid; grid-template-columns: 170px 1fr; gap: 14px;
+  padding: 6px 16px; font-size: 12px;
+}
+.a-k { color: var(--dim); font-size: 11px; }
+.a-v { color: var(--fg); font-family: "Cascadia Mono", Consolas, monospace;
+       font-size: 11px; word-break: break-all; }
