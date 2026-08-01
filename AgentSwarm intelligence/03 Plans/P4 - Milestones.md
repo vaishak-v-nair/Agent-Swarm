@@ -31,6 +31,12 @@ Construction sequence — every milestone ships the same product, more finished.
 - [x] Command palette (ctrl+shift+P)
 - [x] **Exit test:** the morning swarm is one command — `agentswarm --swarm morning`. Build log: [[B4 - M4 It Works For You]]
 
+## M5 — It reaches ✅ BUILT 2026-08-01
+- [x] Drive the panes — send to one, broadcast to all (ctrl+shift+P)
+- [x] Diffs in the cockpit, attributed to the session that made them (ctrl+shift+D)
+- [x] Memory across panes — search every transcript, cited to file and line (ctrl+shift+F)
+- [x] **Verified by operating the app**, not by reading its logs. Build log: [[B5 - M5 Drive Review Remember]]
+
 ## What is built, and what is still unproven
 
 Every milestone has shipped. **Four of the five exit tests have not been run**,
@@ -40,8 +46,9 @@ because all of them require using it for real rather than building more:
 - M2 — "the demo makes one teammate say whoa" — needs a teammate
 - M3 — "five busy sessions, nothing missed" — needs five real sessions
 - M4 — met: the morning swarm is one command
+- M5 — every path driven through the harness; no exit test of its own beyond real use
 
-The next honest move is the [[P7 - Baseline Log (fill daily)|baseline week]], not
-M5. There is no M5 in this plan.
+The baseline week started **2026-08-01**. It is the only thing that will settle
+the four open exit tests, and no further building can substitute for it.
 
 Log progress in [[B1 - Build Log|Build Log]]. Decisions go to [[Decision Log]].
