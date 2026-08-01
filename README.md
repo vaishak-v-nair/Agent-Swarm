@@ -24,15 +24,15 @@ cd app && npm install && npx tauri build --no-bundle
 Then, from the project folder:
 
 ```
-.gentswarm                  reopen what you had open
-.gentswarm --swarm morning  open a named swarm
+.\agentswarm                  reopen what you had open
+.\agentswarm --swarm morning  open a named swarm
 ```
 
 To run it from any folder — which is the normal case, since a pane's working
 directory decides which project's transcripts and swarms it reads:
 
 ```
-powershell -ExecutionPolicy Bypass -File scriptsdd-to-path.ps1
+powershell -ExecutionPolicy Bypass -File scripts\add-to-path.ps1
 ```
 
 Open a new terminal after that and `agentswarm` works anywhere.
