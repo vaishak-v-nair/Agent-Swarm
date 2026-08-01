@@ -181,7 +181,8 @@ cargo run --release --example ptybench  -- 9 12                    # throughput 
 
 ## Status
 
-Seven milestones built. The exit tests that matter — *is it my daily driver*,
+Fifteen build cycles, sixty-seven automated tests, a smoke test and a
+self-driving recording on every build. The exit tests that matter — *is it my daily driver*,
 *does a teammate say whoa*, *five busy sessions and nothing missed* — need a week
 of real use, not another feature. See
 `AgentSwarm intelligence/03 Plans/P4 - Milestones.md`.

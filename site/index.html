@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agentswarm — the terminal built for agentic coding</title>
+<meta name="description" content="Run several coding agents at once and know which one is waiting on you, what any of them decided, and why every line changed. Windows, open source.">
+<style>
+/* The site wears the app's own skin: warm graphite, annunciator colours,
+   brand pink on the wordmark only, mono for data and proportional for prose.
+   A landing page that disagrees with its product is a small lie. */
+:root{
+  --bg:#141519;--surface:#1b1c21;--raised:#212228;--line:#282a30;--line-lit:#343740;
+  --fg:#d8d6d1;--dim:#7d7f86;--faint:#55575e;
+  --brand:#d6547a;--run:#6fae86;--attn:#d9a05b;--adv:#7f9dc0;
+  --mono:"Cascadia Mono","Cascadia Code",Consolas,ui-monospace,monospace;
+  --ui:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+  --r:10px;--r-sm:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font:15px/1.65 var(--ui);-webkit-font-smoothing:antialiased}
+.wrap{max-width:980px;margin:0 auto;padding:0 24px}
+a{color:var(--adv);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,.mono{font-family:var(--mono)}
+
+/* header */
+header{display:flex;align-items:center;gap:14px;padding:18px 0}
+.wordmark{color:var(--brand);font-weight:600;letter-spacing:.08em;font-size:15px}
+.lamps{display:flex;gap:3px}
+.lamp{width:20px;height:5px;border-radius:2px}
+.lamp.g{background:var(--run)}.lamp.a{background:var(--attn);height:9px;margin-top:-2px}
+.lamp.b{background:var(--adv)}.lamp.i{background:var(--line-lit)}
+header nav{margin-left:auto;display:flex;gap:22px;font-size:13px;color:var(--dim)}
+header nav a{color:var(--dim)}
+
+/* hero */
+.hero{padding:52px 0 34px}
+.hero h1{font-size:clamp(28px,5vw,44px);line-height:1.15;font-weight:650;letter-spacing:-.015em;max-width:760px}
+.hero h1 em{font-style:normal;color:var(--attn)}
+.hero p.sub{margin-top:16px;font-size:17px;color:var(--dim);max-width:640px}
+.cta{margin-top:26px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-block;padding:10px 20px;border-radius:var(--r-sm);font-size:14px;border:1px solid var(--line-lit)}
+.btn.primary{background:var(--raised);color:var(--fg);border-color:var(--attn)}
+.btn.primary:hover{background:#2a2317;text-decoration:none}
+.btn.ghost{color:var(--dim)}
+.btn.ghost:hover{color:var(--fg);text-decoration:none}
+.cta .note{font-size:12px;color:var(--faint)}
+
+/* video */
+.demo{margin:34px 0 8px}
+.demo video{width:100%;border:1px solid var(--line);border-radius:var(--r);display:block;background:var(--surface)}
+.demo .cap{margin-top:10px;font-size:12.5px;color:var(--faint)}
+.demo .cap b{color:var(--dim);font-weight:600}
+
+/* sections */
+section{padding:44px 0 8px}
+h2{font-size:13px;letter-spacing:.12em;text-transform:lowercase;color:var(--attn);font-weight:600;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px}
+.card h3{font-size:15px;font-weight:600;margin-bottom:7px}
+.card p{font-size:13.5px;color:var(--dim)}
+.card .n{font-family:var(--mono);font-size:11.5px;color:var(--run);display:block;margin-top:10px}
+
+/* install */
+.install .step{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin-bottom:14px}
+.install .step h3{font-size:14px;margin-bottom:8px}
+.install .step h3 .k{color:var(--faint);font-weight:400;font-size:12px;margin-right:8px}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;
+    font-family:var(--mono);font-size:12.5px;color:var(--fg);overflow-x:auto;position:relative;margin-top:8px}
+pre .copy{position:absolute;top:8px;right:8px;background:var(--raised);border:1px solid var(--line);
+    border-radius:4px;color:var(--dim);font:11px var(--ui);padding:3px 9px;cursor:pointer}
+pre .copy:hover{color:var(--fg);border-color:var(--line-lit)}
+.install p.why{font-size:12.5px;color:var(--faint);margin-top:8px}
+.smart{border-left:2px solid var(--attn);padding:2px 0 2px 12px;margin-top:10px;font-size:12.5px;color:var(--dim)}
+
+/* keys */
+table{width:100%;border-collapse:collapse;font-size:13px}
+td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+td:first-child{font-family:var(--mono);font-size:12px;color:var(--attn);white-space:nowrap;width:200px}
+td:last-child{color:var(--dim)}
+
+/* honest */
+.honest .card{border-color:#3a3025}
+.honest .card p{color:var(--dim)}
+.honest .lead{font-size:14px;color:var(--dim);max-width:680px;margin-bottom:18px}
+
+footer{padding:48px 0 40px;font-size:12.5px;color:var(--faint);border-top:1px solid var(--line);margin-top:56px}
+footer .wordmark{font-size:13px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="wordmark">agentswarm</span>
+  <span class="lamps" title="the muster rail — one lamp per pane">
+    <span class="lamp g"></span><span class="lamp g"></span><span class="lamp a"></span>
+    <span class="lamp b"></span><span class="lamp i"></span>
+  </span>
+  <nav>
+    <a href="#see">see it</a><a href="#install">install</a><a href="#keys">keys</a><a href="#honest">limits</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <h1>Five agents are working.<br>Which one is <em>waiting on you?</em></h1>
+  <p class="sub">A terminal shows you output. It cannot tell you which session is blocked
+  on a permission prompt, what any of them decided an hour ago, or why the file you are
+  staring at changed. AgentSwarm reads your agents' own session records alongside the
+  live terminal — so it can.</p>
+  <div class="cta">
+    <a class="btn primary" href="#install">Install on Windows</a>
+    <a class="btn ghost" href="#see">Watch it drive itself</a>
+    <span class="note">open source · no telemetry · your transcripts never leave your machine</span>
+  </div>
+</div>
+
+<div class="demo" id="see">
+  <video src="agentswarm.mp4" poster="poster.png" controls muted loop playsinline></video>
+  <p class="cap"><b>This recording is the test suite.</b> The app drives its own UI —
+  runs commands, switches panes, opens every view — and the build records it.
+  No keystrokes were sent; what you see is <code>agentswarm --demo</code>.</p>
+</div>
+
+<section>
+  <h2>what a terminal cannot tell you</h2>
+  <div class="grid">
+    <div class="card"><h3>Waiting on you</h3>
+      <p>Every pane carries a live state — running, waiting, your turn — derived from the
+      bell, output throughput, and unfinished tool calls. The window title carries the
+      count to your taskbar.</p><span class="n">waiting · 12m34s — the fact, not a plea</span></div>
+    <div class="card"><h3>Plain english</h3>
+      <p>One key flips a pane between the raw terminal and the same live session as
+      readable cards, built from the agent's own transcript — never scraped off the screen.</p>
+      <span class="n">98.9% of conversational lines become cards</span></div>
+    <div class="card"><h3>Why is this line here</h3>
+      <p>Open a changed file: the diff arrives with the conversation that produced it,
+      cited to transcript and line. git blame answers who and when. This answers why.</p>
+      <span class="n">⚙ Write · session.jsonl:1765</span></div>
+    <div class="card"><h3>Everything, in order</h3>
+      <p>One timeline interleaves every session by real time. "What happened, in what
+      order, across all of them" is the question a grid of terminals structurally cannot answer.</p>
+      <span class="n">ctrl+shift+M</span></div>
+    <div class="card"><h3>Any agent</h3>
+      <p>Claude Code and Codex session formats ship built in; any agent that writes a
+      session record can declare where. A pane that keeps no record says so instead of guessing.</p>
+      <span class="n">"transcript": { "dir": "{cwd}/.sessions" }</span></div>
+    <div class="card"><h3>Still a real terminal</h3>
+      <p>ConPTY underneath, GPU-rendered, with copy/paste, find-in-scrollback, clickable
+      links, and input that never waits on output.</p>
+      <span class="n">keystroke p99 under load: 0.06 ms</span></div>
+  </div>
+</section>
+
+<section class="install" id="install">
+  <h2>install</h2>
+  <div class="step">
+    <h3><span class="k">1</span>Get it</h3>
+    <p class="why">Windows 10/11. The installer fetches WebView2 if you don't have it.</p>
+    <pre><code>AgentSwarm_0.1.0_x64_en-US.msi</code><button class="copy" data-t="AgentSwarm_0.1.0_x64_en-US.msi">copy</button></pre>
+    <p class="smart">Windows SmartScreen will warn about an unsigned installer from a new
+    publisher — that warning is accurate, and "More info → Run anyway" is your call to
+    make. Or build from source below and skip the question entirely.</p>
+  </div>
+  <div class="step">
+    <h3><span class="k">or</span>Build from source</h3>
+    <pre><code>git clone &lt;repository&gt;
+cd agent-swarm/app
+npm install
+npx tauri build --no-bundle</code><button class="copy" data-t="cd agent-swarm/app && npm install && npx tauri build --no-bundle">copy</button></pre>
+    <p class="why">Needs Node ≥ 20 and Rust. The binary lands in
+    <code>app/src-tauri/target/release/</code>; <code>scripts\add-to-path.ps1</code> puts
+    <code>agentswarm</code> on your PATH.</p>
+  </div>
+  <div class="step">
+    <h3><span class="k">2</span>Check it</h3>
+    <pre><code>agentswarm --doctor</code><button class="copy" data-t="agentswarm --doctor">copy</button></pre>
+    <p class="why">Seven checks — PATH, agents found, session records readable, config
+    valid, git, environment, last crash. Every failing check prints the command that
+    fixes it. If something breaks later, this is where the answer is.</p>
+  </div>
+  <div class="step">
+    <h3><span class="k">3</span>Open your swarm</h3>
+    <pre><code>agentswarm --swarm morning</code><button class="copy" data-t="agentswarm --swarm morning">copy</button></pre>
+    <p class="why">A swarm is the set of panes you always open together — folder, label
+    and permission policy per pane, in <code>.agentswarm/recipes.json</code>. A first run
+    writes a starter you can edit. Plain <code>agentswarm</code> reopens whatever you had.</p>
+  </div>
+</section>
+
+<section id="keys">
+  <h2>one key worth memorising</h2>
+  <table>
+    <tr><td>ctrl+shift+P</td><td><b>everything</b> — swarms, panes, search, settings. Type three letters; <span class="mono">mrn</span> finds <span class="mono">morning</span>.</td></tr>
+    <tr><td>ctrl+shift+space</td><td>jump to whatever has been waiting on you longest</td></tr>
+    <tr><td>ctrl+shift+E</td><td>this pane: raw terminal ⇄ plain english</td></tr>
+    <tr><td>ctrl+shift+M</td><td>every session, in the order it happened</td></tr>
+    <tr><td>ctrl+shift+D</td><td>what changed on disk — and why</td></tr>
+    <tr><td>ctrl+shift+F&nbsp;/&nbsp;S</td><td>search every session ever · find in this pane</td></tr>
+    <tr><td>ctrl+shift+O</td><td>pin — two panes share the stage</td></tr>
+    <tr><td>ctrl+shift+C&nbsp;/&nbsp;V</td><td>copy / paste · right-click copies a selection, pastes without one</td></tr>
+  </table>
+</section>
+
+<section class="honest" id="honest">
+  <h2>what it does not do</h2>
+  <p class="lead">Most tool pages hide this section. This project was built on the rule
+  that a wrong reading is worse than no reading — that applies to its own page too.</p>
+  <div class="grid">
+    <div class="card"><h3>It is not a better plain terminal</h3>
+      <p>Windows Terminal is more mature at being a terminal: tabs, arbitrary splits,
+      years of polish. If you run one shell and no agents, use that.</p></div>
+    <div class="card"><h3>Windows only, today</h3>
+      <p>ConPTY, WebView2 and the job-object process cleanup are all Windows-specific.
+      Nothing in the design prevents other platforms; nothing has been built for them.</p></div>
+    <div class="card"><h3>Young, and honest about it</h3>
+      <p>Built in the open, tested by its builder and its own self-driving test suite —
+      67 automated tests, a smoke run on the real binary, and a recording per build. It
+      has not yet survived a thousand strangers. You may be early.</p></div>
+    <div class="card"><h3>Search finds words, not meaning</h3>
+      <p>History search is exact and cited — every hit names its transcript and line —
+      but "what did I decide about auth" only matches if you said "auth".</p></div>
+  </div>
+</section>
+
+<footer>
+  <span class="wordmark">agentswarm</span> — the terminal built for agentic coding.
+  Your sessions are read from your own disk and never leave it.
+</footer>
+
+</div>
+<script>
+for (const b of document.querySelectorAll('.copy')) {
+  b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.t); b.textContent = 'copied'; }
+    catch { b.textContent = 'select it'; }
+    setTimeout(() => b.textContent = 'copy', 1600);
+  });
+}
+</script>
+</body>
+</html>

@@ -432,6 +432,43 @@ fn which(bin: &str) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Everything this process spawns dies with it — the X button, a crash, a
+    // Stop-Process -Force, all of them. Without this, each pane's headless
+    // conhost.exe outlived the app, hung, and Windows raised a "stopped
+    // responding" dialog per pane. Multiple panes meant multiple error dialogs,
+    // which is exactly what got reported. A Job Object with kill-on-close is
+    // the Windows-correct answer: the OS does the cleanup, so it works even
+    // when we never get the chance to.
+    if let Ok(job) = win32job::Job::create() {
+        let ok = job
+            .query_extended_limit_info()
+            .map(|mut info| {
+                info.limit_kill_on_job_close();
+                job.set_extended_limit_info(&mut info).is_ok() && job.assign_current_process().is_ok()
+            })
+            .unwrap_or(false);
+        if ok {
+            std::mem::forget(job); // the handle must live as long as the process
+        } else {
+            eprintln!("[rust] job object setup failed — pane processes may outlive the app");
+        }
+    }
+
+    // A panic with panic=abort dies as a bare WER dialog and leaves nothing to
+    // debug. Write what happened somewhere doctor can find it first.
+    std::panic::set_hook(Box::new(|info| {
+        if let Ok(base) = std::env::var("LOCALAPPDATA") {
+            let dir = std::path::PathBuf::from(base).join("agentswarm");
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(
+                dir.join("panic.log"),
+                format!("{}
+{info}
+", chrono_free_timestamp()),
+            );
+        }
+    }));
+
     // --doctor prints and exits. No window: it has to work when the window is
     // exactly what is broken, and the smoke test calls it before driving the UI.
     if doctor::requested() {
@@ -478,6 +515,14 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentSwarm");
+}
+
+/// Seconds since the epoch — enough to date a crash without a chrono dep.
+fn chrono_free_timestamp() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| format!("unix {}", d.as_secs()))
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

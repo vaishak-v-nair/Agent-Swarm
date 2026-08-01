@@ -127,6 +127,20 @@ pub fn run(cwd: &str) -> Vec<Check> {
         ok("environment", "clean")
     });
 
+    // 7. Did a previous run die badly? The panic hook writes here, so a crash
+    //    that showed the user only a Windows dialog leaves something readable.
+    if let Ok(base) = std::env::var("LOCALAPPDATA") {
+        let f = std::path::PathBuf::from(base).join("agentswarm").join("panic.log");
+        match std::fs::read_to_string(&f) {
+            Ok(text) if !text.trim().is_empty() => out.push(bad(
+                "last crash",
+                text.lines().nth(1).unwrap_or("a previous run panicked").to_string(),
+                format!("details in {} — delete it to clear this warning", f.display()),
+            )),
+            _ => out.push(ok("last crash", "none recorded")),
+        }
+    }
+
     out
 }
 
