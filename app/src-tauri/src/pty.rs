@@ -224,10 +224,18 @@ pub fn spawn<S: Sink>(
 
     let scrubbed = scrub_session_env(&mut cmd);
     if !scrubbed.is_empty() {
-        // Say it out loud. A pane that quietly behaves differently depending on
-        // what launched the app is the worst kind of bug to be handed.
-        println!("[rust] pane {id}: cleared {} inherited session var(s): {}",
-                 scrubbed.len(), scrubbed.join(" "));
+        // Say it out loud — a pane that quietly behaves differently depending on
+        // what launched the app is the worst kind of bug to be handed. But say it
+        // in full only once: nine panes repeating the same nineteen names buries
+        // every other line in the log, which is its own kind of silence.
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static TOLD: AtomicBool = AtomicBool::new(false);
+        if TOLD.swap(true, Ordering::Relaxed) {
+            println!("[rust] pane {id}: cleared {} inherited session vars", scrubbed.len());
+        } else {
+            println!("[rust] pane {id}: cleared {} inherited session vars: {}",
+                     scrubbed.len(), scrubbed.join(" "));
+        }
     }
 
     let mut child = pair.slave.spawn_command(cmd)?;
