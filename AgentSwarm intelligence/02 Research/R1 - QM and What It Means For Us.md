@@ -23,7 +23,12 @@ Reported features: triggers (crons, webhooks), memory, shared files, connectors,
 agent browser support, shareable web artifacts, multiplayer projects, per-person
 isolated workspaces. Used across accounting, legal, events and engineering.
 
-> **Read this note with a caveat.** x.com returned HTTP 402 to the fetcher, so
+> **Superseded in part by [[R2 - QM Read In Full]]**, which is from the cloned
+> repository rather than from coverage. In particular this note's guess that "a
+> QM agent could reasonably run inside an AgentSwarm pane" is **wrong**: QM
+> drives agents through SDKs, headlessly, and has no terminal at all.
+>
+> **Read the rest with a caveat.** x.com returned HTTP 402 to the fetcher, so
 > the quote and the feature list come from search results and coverage, **not**
 > from the post or the repo directly. Nobody has read the QM source. Treat every
 > claim here as secondhand until someone opens the repository.
