@@ -39,7 +39,31 @@ pub struct Settings {
     /// "stage" — one pane at reading size, the rest as live cards.
     /// "grid"  — every pane tiled evenly.
     pub layout: String,
+    /// M11 — profiles you define yourself, by name.
+    ///
+    /// AgentSwarm shipped knowing five commands and nothing else, which quietly
+    /// asserted that a pane runs Claude Code. YC open-sourcing QM — a harness
+    /// where Pi, OpenCode, Codex and Claude Code all drive the same core — makes
+    /// that assumption look like the limitation it is. The cockpit is about
+    /// running several agents at once; it should not care which agent.
+    #[serde(default)]
+    pub profiles: std::collections::BTreeMap<String, Profile>,
 }
+
+/// A command a pane can run.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Profile {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Run inside a shell that stays open, so the pane survives the agent
+    /// exiting. This is what `claude` already does, and what you want for any
+    /// tool you might quit and restart without losing the pane.
+    #[serde(default = "yes")]
+    pub keep_open: bool,
+}
+
+fn yes() -> bool { true }
 
 impl Default for Settings {
     fn default() -> Self {
@@ -51,6 +75,7 @@ impl Default for Settings {
             feed_max: d_feed(),
             restore_layout: d_restore(),
             layout: d_layout(),
+            profiles: Default::default(),
         }
     }
 }
@@ -120,6 +145,24 @@ mod tests {
         assert_eq!(s.scrollback, d_scrollback());
         assert!(s.restore_layout);
         assert_eq!(s.layout, "stage");
+        assert!(s.profiles.is_empty());
+    }
+
+    #[test]
+    fn a_profile_defined_in_settings_is_read_whole() {
+        // M11 — the cockpit should not care which agent a pane runs. YC's QM
+        // makes the point: Pi, OpenCode, Codex and Claude Code all drive the
+        // same core, so a terminal that only knows `claude` is the limitation.
+        let s: Settings = serde_json::from_str(r#"{"profiles":{
+            "qm": {"command":"qm","args":["run"]},
+            "codex": {"command":"codex","keep_open":false}}}"#).unwrap();
+        assert_eq!(s.profiles.len(), 2);
+        assert_eq!(s.profiles["qm"].command, "qm");
+        assert_eq!(s.profiles["qm"].args, vec!["run"]);
+        assert!(s.profiles["qm"].keep_open, "a pane should outlive its agent by default");
+        assert!(!s.profiles["codex"].keep_open);
+        // and the rest of the file still has its defaults
+        assert_eq!(s.stuck_ms, d_stuck());
     }
 
     #[test]

@@ -86,6 +86,36 @@ pub fn scrub_session_env(cmd: &mut CommandBuilder) -> Vec<String> {
 /// is expressed: the recipe says `--permission-mode plan`, and this passes it
 /// through. AgentSwarm never invents a permission flag of its own — whatever the
 /// pane is allowed to do, the user wrote down.
+/// A command defined in settings rather than known to this file.
+pub struct Custom<'a> {
+    pub command: &'a str,
+    pub args: &'a [String],
+    pub keep_open: bool,
+}
+
+/// M11 — a profile the user defined. Built through the same PowerShell wrapper
+/// and the same quoting as the built-ins, so a command from a settings file
+/// cannot become executable script any more than a recipe argument can.
+pub fn resolve_custom(c: &Custom, extra: &[String]) -> CommandBuilder {
+    if c.keep_open {
+        let mut line = String::new();
+        // The command itself is quoted too. It comes from a file on disk.
+        line.push_str(&format!("& {}", ps_quote(c.command)));
+        for a in c.args.iter().chain(extra.iter()) {
+            line.push(' ');
+            line.push_str(&ps_quote(a));
+        }
+        let mut cmd = CommandBuilder::new("powershell.exe");
+        cmd.args(["-NoLogo", "-NoExit", "-Command", &line]);
+        cmd
+    } else {
+        let mut cmd = CommandBuilder::new(c.command);
+        cmd.args(c.args);
+        cmd.args(extra);
+        cmd
+    }
+}
+
 pub fn resolve(profile: &str, args: &[String]) -> CommandBuilder {
     match profile {
         "claude" => {
@@ -132,6 +162,18 @@ mod tests {
 
     /// This test mutates process environment, so it must not run beside another
     /// that reads it. Nothing else here touches env.
+    #[test]
+    fn a_profile_from_settings_is_quoted_like_everything_else() {
+        use super::{resolve_custom, Custom};
+        // A command name out of a settings file gets the same treatment as a
+        // recipe argument: quoted, inert, never script.
+        let args = vec!["--flag".to_string()];
+        let c = Custom { command: "qm; rm -rf /", args: &args, keep_open: true };
+        let built = format!("{:?}", resolve_custom(&c, &[]));
+        assert!(built.contains("'qm; rm -rf /'"), "command must be quoted: {built}");
+        assert!(built.contains("'--flag'"), "args must be quoted: {built}");
+    }
+
     #[test]
     fn a_pane_does_not_inherit_the_session_that_launched_the_app() {
         // The bug: AgentSwarm launched from a terminal running Claude Code passed
@@ -200,6 +242,7 @@ pub fn spawn<S: Sink>(
     profile: &str,
     cwd: Option<String>,
     args: &[String],
+    custom: Option<Custom>,
     cols: u16,
     rows: u16,
 ) -> anyhow::Result<()> {
@@ -210,7 +253,10 @@ pub fn spawn<S: Sink>(
         pixel_height: 0,
     })?;
 
-    let mut cmd = resolve(profile, args);
+    let mut cmd = match &custom {
+        Some(c) => resolve_custom(c, args),
+        None => resolve(profile, args),
+    };
     if let Some(dir) = cwd {
         if std::path::Path::new(&dir).is_dir() {
             cmd.cwd(dir);

@@ -3,16 +3,13 @@
   "description": null,
   "panes": [
     {
-      "profile": "claude",
+      "profile": "node",
       "cwd": "E:\\agent-swarm",
-      "label": "swarm",
-      "args": []
-    },
-    {
-      "profile": "powershell",
-      "cwd": "E:\\agent-swarm",
-      "label": "shell",
-      "args": []
+      "label": "custom",
+      "args": [
+        "--eval",
+        "console.log(1)"
+      ]
     }
   ]
 }

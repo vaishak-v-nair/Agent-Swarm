@@ -61,6 +61,15 @@ fn pty_spawn(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
+    // A profile the user defined wins over a built-in of the same name, so a
+    // settings file can correct anything this binary got wrong about a command.
+    let here = cwd.clone().unwrap_or_else(|| ".".into());
+    let defined = settings::load(&here).settings.profiles.remove(&profile);
+    let custom = defined.as_ref().map(|d| pty::Custom {
+        command: &d.command,
+        args: &d.args,
+        keep_open: d.keep_open,
+    });
     pty::spawn(
         Arc::new(WebviewSink(app)),
         state.panes.clone(),
@@ -68,6 +77,7 @@ fn pty_spawn(
         &profile,
         cwd,
         &args.unwrap_or_default(),
+        custom,
         cols,
         rows,
     )
@@ -109,7 +119,7 @@ fn save_recipe(cwd: String, recipe: recipes::Recipe) -> Result<String, String> {
 /// M8. Give a first run something to find. Returns the path if one was written.
 #[tauri::command]
 fn seed_first_run(cwd: String) -> Option<String> {
-    recipes::seed_if_absent(&cwd, &available_profiles())
+    recipes::seed_if_absent(&cwd, &available_profiles(Some(cwd.clone())))
 }
 
 /// M8. What this is and where it keeps things, for the about entry.
@@ -260,11 +270,20 @@ fn diag(msg: String) {
 }
 
 #[tauri::command]
-fn available_profiles() -> Vec<String> {
+fn available_profiles(cwd: Option<String>) -> Vec<String> {
     let mut out = vec!["powershell".to_string(), "cmd".to_string()];
     for (bin, name) in [("pwsh.exe", "pwsh"), ("wsl.exe", "wsl"), ("claude", "claude")] {
         if which(bin) {
             out.push(name.to_string());
+        }
+    }
+    // Profiles from settings, but only the ones this machine can actually run —
+    // offering a command that is not installed is how a menu starts lying.
+    if let Some(cwd) = cwd {
+        for (name, p) in settings::load(&cwd).settings.profiles {
+            if !out.contains(&name) && which(&p.command) {
+                out.push(name);
+            }
         }
     }
     out

@@ -1337,9 +1337,11 @@ let defaultProfile = 'powershell';
 let workdir = null;
 
 (async () => {
-  try { profiles = await invoke('available_profiles'); } catch { /* keep the default */ }
-  if (profiles.includes('claude')) defaultProfile = 'claude';
+  // cwd first: custom profiles live in that folder's settings, so asking what
+  // this machine can run means nothing until we know where we are.
   try { workdir = await invoke('default_cwd'); } catch { /* panes inherit instead */ }
+  try { profiles = await invoke('available_profiles', { cwd: workdir }); } catch { /* keep the default */ }
+  if (profiles.includes('claude')) defaultProfile = 'claude';
   await loadSettings();
   // A first run finds no recipes, so the palette's headline feature looks empty
   // and the app appears to do less than it does. A starter file also teaches the

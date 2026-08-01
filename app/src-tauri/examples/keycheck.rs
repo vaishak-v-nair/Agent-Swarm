@@ -63,7 +63,7 @@ fn main() -> anyhow::Result<()> {
 
     let buf = Arc::new(Buf(Mutex::new(String::new())));
     let panes = Arc::new(Panes::default());
-    spawn(buf.clone(), panes.clone(), 1, &profile, Some(cwd.clone()), &[], 120, 30)?;
+    spawn(buf.clone(), panes.clone(), 1, &profile, Some(cwd.clone()), &[], None, 120, 30)?;
 
     println!("profile={profile} cwd={cwd}\nwaiting {boot}s for it to come up…");
     std::thread::sleep(std::time::Duration::from_secs(boot));
