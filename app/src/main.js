@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { paneState, fmt } from './state.js';
 import { score, insertOrdered } from './order.js';
+import { lastMeaningful } from './peek.js';
 import '@xterm/xterm/css/xterm.css';
 
 addEventListener('error', e => diag('window error: ' + e.message + ' @' + e.filename + ':' + e.lineno));
@@ -132,9 +133,12 @@ function rememberLastLine(p, chunk) {
   if (!clean.trim()) return;
   const lines = clean.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (!lines.length) return;
-  const last = lines[lines.length - 1];
+  // Take the last line that actually says something. A folded pane showing "8"
+  // is worse than one showing nothing: it looks like information and is not.
+  const said = lastMeaningful(lines);
+  if (!said) return;
   // A repainting TUI rewrites the same line constantly; only keep a change.
-  if (last !== p.lastLine) p.lastLine = last.slice(0, 160);
+  if (said !== p.lastLine) p.lastLine = said.slice(0, 160);
 }
 
 const fitAll = () => panes.forEach(p => refit(p));

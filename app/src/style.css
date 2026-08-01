@@ -541,3 +541,63 @@ kbd { border-radius: var(--r-sm); }
     transition: none !important;
   }
 }
+
+/* ── seeing it for the first time ─────────────────────────────────────────
+   A recording of the app finally made four problems visible that thirteen
+   milestones of building had not. Each fix below is one of them.            */
+
+/* 1. The rail was ~700px of empty column below a single folded pane, and read
+      as an unfinished layout rather than a panel with room in it. Narrower,
+      and given a surface of its own so the empty part is obviously space
+      rather than nothing. */
+#board[data-layout="stage"] { grid-template-columns: 216px minmax(0, 1fr); }
+#board[data-layout="stage"] > #rail {
+  /* Hug the panes. Bordering the full column made the dead space MORE visible,
+     not less — a tall empty box reads as broken where plain background reads as
+     room. The panel is only as tall as it has something to hold. */
+  align-self: start;
+  max-height: 100%;
+  background: rgba(0, 0, 0, .14);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--gap);
+  gap: 6px;
+}
+#board[data-layout="stage"] > #rail::after {
+  /* Names what the empty space is for. Disappears the moment it fills up. */
+  content: 'ctrl+shift+T for another pane';
+  color: var(--faint);
+  font-size: 10px;
+  padding: 6px 4px;
+  order: 999;
+}
+#board[data-layout="stage"] > #rail:has(.pane:nth-child(4))::after { display: none; }
+.pane.carded { background: var(--surface); }
+.pane.carded:hover { background: var(--raised); }
+
+/* 3. Two 9px squares next to the profile buttons read as a rendering artifact,
+      not as the signature element. Moved beside the tally so the lamps and the
+      count are one object, and given enough size and contrast to be a signal. */
+#muster { gap: 4px; margin-left: 2px; order: 2; }
+#muster .lamp {
+  width: 11px; height: 11px; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+  cursor: pointer;
+}
+#muster .lamp[data-state="idle"]  { background: #3a3d46; }
+#muster .lamp[data-state="ended"] { background: transparent; box-shadow: inset 0 0 0 1px #3a3d46; }
+#tally { order: 3; }
+#flash { order: 4; }
+
+/* 4. The profile buttons were the loudest thing in the chrome and are the least
+      important control — ctrl+shift+P does all of it and more. Quiet until
+      hovered. */
+#profiles { order: 1; gap: 2px; opacity: .55; transition: opacity .15s var(--ease); }
+#profiles:hover { opacity: 1; }
+#profiles button {
+  border-color: transparent;
+  color: var(--faint);
+  padding: 2px 7px;
+  font-size: 10px;
+}
+#profiles button:hover { color: var(--fg); border-color: var(--line); background: var(--raised); }
