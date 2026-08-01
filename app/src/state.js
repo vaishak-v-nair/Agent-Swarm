@@ -63,7 +63,12 @@ export function paneState(p, now, tune = {}) {
   const pend = oldestPending(p.pending);
 
   // A bell outranks everything. It is not an inference — it is a request.
-  if (p.bellAt) return { key: 'needs', label: 'needs you', since: now - p.bellAt };
+  //
+  // The label is "waiting", not "needs you". Naming the app's want rather than
+  // the pane's condition is what made this whole layer read as needy: an
+  // instrument reports a state, it does not ask to be attended to. The user is
+  // the one who decides whether waiting is urgent.
+  if (p.bellAt) return { key: 'needs', label: 'waiting', since: now - p.bellAt };
 
   // The tool signal is only meaningful when the transcript is this pane's OWN
   // session. While merely catching up on an earlier one, its outstanding calls

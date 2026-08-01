@@ -1,12 +1,54 @@
+/* AgentSwarm — an instrument, not an assistant.
+ *
+ * The redesign has one diagnosis behind it: the app was using its brand colour
+ * as its alarm colour. Every alert was the product shouting its own name, in
+ * its own pink, with a breathing animation and a taskbar flash behind it. That
+ * is what "needy" means in an interface — it behaves like something that wants
+ * to be noticed rather than something that reports.
+ *
+ * A flight deck does not say "I need you". It lights a steady annunciator and
+ * trusts the pilot to read it. Calm panel, urgent pilot — never the reverse.
+ *
+ * So: brand colour is for the wordmark only. Status colour follows annunciator
+ * convention — amber means attention, green means running, blue is advisory,
+ * grey is inactive, and rose is kept for something genuinely broken. Nothing
+ * animates.
+ *
+ * The chrome is monospaced and sits on a character grid: labels, states,
+ * elapsed times, the palette. This is an instrument for reading machine output,
+ * so it uses the machine's grid, and times do not jitter as digits change.
+ * Prose — card bodies, reasons, search results — is proportional, because
+ * monospaced paragraphs are a punishment. That exception is the whole rule.
+ */
+
 :root {
-  --bg: #0c0d10;
-  --bar: #14161b;
-  --line: #23262e;
-  --dim: #7a828f;
-  --fg: #d7dbe2;
-  --accent: #d6547a;
-  --live: #4fa376;
-  --gap: 6px;
+  /* Warm graphite, not black. Black plus one bright accent is the house style
+     of every dark developer tool; a warm cast puts the panel closer to
+     equipment than to a void. */
+  --bg:      #141519;
+  --surface: #1b1c21;
+  --raised:  #212228;
+  --line:    #282a30;
+  --line-lit:#343740;
+
+  --fg:      #d8d6d1;   /* slightly warm off-white — not blue-white */
+  --dim:     #7d7f86;
+  --faint:   #55575e;
+
+  /* Identity. Appears on the wordmark and nowhere else. */
+  --brand:   #d6547a;
+
+  /* Annunciator. Meaning first, decoration never. */
+  --run:     #6fae86;   /* working */
+  --attn:    #d9a05b;   /* waiting on you */
+  --adv:     #7f9dc0;   /* advisory — your turn, and Claude's voice */
+  --warn:    #c9727f;   /* something is actually broken */
+
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --ui:   "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+  --gap: 5px;
+  --r: 5px;             /* one radius everywhere; mixed radii read as accident */
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,42 +57,71 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--fg);
-  font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+  font: 12px/1.45 var(--mono);
+  font-variant-numeric: tabular-nums;   /* elapsed times must not jitter */
   overflow: hidden;
 }
 
+/* ── the top rail ───────────────────────────────────────────────────────── */
 #bar {
   display: flex;
   align-items: center;
-  gap: 14px;
-  height: 34px;
+  gap: 16px;
+  height: 30px;
   padding: 0 12px;
-  background: var(--bar);
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
   user-select: none;
   -webkit-user-select: none;
+  font-size: 11px;
 }
-.brand { font-weight: 600; letter-spacing: .3px; color: var(--accent); }
+.brand {
+  color: var(--brand);
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: lowercase;
+}
 .spacer { flex: 1; }
-#hint { color: var(--dim); font-size: 11px; }
+#hint { color: var(--faint); font-size: 10.5px; letter-spacing: .02em; }
+#hint b { color: var(--dim); font-weight: 500; }
 
-#profiles { display: flex; gap: 6px; }
+#profiles { display: flex; gap: 4px; }
 #profiles button {
   background: transparent;
   border: 1px solid var(--line);
   color: var(--dim);
-  border-radius: 5px;
-  padding: 3px 9px;
+  border-radius: var(--r);
+  padding: 2px 8px;
   font: inherit;
-  font-size: 11px;
+  font-size: 10.5px;
   cursor: pointer;
 }
-#profiles button:hover { color: var(--fg); border-color: var(--dim); }
+#profiles button:hover { color: var(--fg); border-color: var(--line-lit); }
+#profiles button:focus-visible { outline: 1px solid var(--adv); outline-offset: 1px; }
 
-/* Auto-tiling: panes fill the space evenly. A cockpit shows everything at once —
-   nested splits hide sessions behind each other, which is the failure being fixed. */
+/* The muster rail — one lamp per pane, in pane order.
+   The signature element. With nine sessions running, this is the difference
+   between reading the room and auditing nine headers. It replaces a tally that
+   only ever said a number, and it costs one line of chrome. */
+#muster { display: flex; gap: 3px; align-items: center; }
+#muster .lamp {
+  width: 9px; height: 9px; border-radius: 2px;
+  background: var(--faint);
+  /* squares, not dots: an LED on a panel is square, a notification is round */
+}
+#muster .lamp[data-state="work"]  { background: var(--run); }
+#muster .lamp[data-state="needs"] { background: var(--attn); }
+#muster .lamp[data-state="done"]  { background: var(--adv); }
+#muster .lamp[data-state="idle"]  { background: var(--line-lit); }
+#muster .lamp[data-state="ended"] { background: transparent; box-shadow: inset 0 0 0 1px var(--line-lit); }
+
+#tally { color: var(--dim); font-size: 10.5px; letter-spacing: .02em; }
+#tally.alert { color: var(--attn); }
+#flash { color: var(--adv); font-size: 10.5px; }
+
+/* ── the grid ───────────────────────────────────────────────────────────── */
 #grid {
-  height: calc(100% - 34px);
+  height: calc(100% - 30px);
   display: grid;
   gap: var(--gap);
   padding: var(--gap);
@@ -63,377 +134,286 @@ html, body {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: #0f1116;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r);
   overflow: hidden;
 }
-.pane.focus { border-color: var(--accent); }
+/* Focus is a lit edge on one side, not a full ring. A ring around the active
+   pane competes with the pane that actually wants attention. */
+.pane.focus { border-color: var(--line-lit); box-shadow: inset 2px 0 0 var(--adv); }
+
 .pane.zoom { grid-column: 1 / -1 !important; grid-row: 1 / -1 !important; }
 
 .head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 24px;
-  padding: 0 9px;
-  background: #12141a;
+  gap: 9px;
+  height: 22px;
+  padding: 0 8px;
+  background: var(--raised);
   border-bottom: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--dim);
   user-select: none;
   -webkit-user-select: none;
   flex: 0 0 auto;
 }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); flex: 0 0 auto; }
-.dot.dead { background: #5b606b; }
-.head .name { color: var(--fg); }
-.head .x { cursor: pointer; padding: 0 3px; }
-.head .x:hover { color: var(--accent); }
-.head .mode {
+.dot {
+  width: 7px; height: 7px; border-radius: 2px;
+  background: var(--faint);
+  flex: 0 0 auto;
+}
+.head .name { color: var(--fg); letter-spacing: .02em; }
+.head .id { color: var(--faint); }
+.head .x { cursor: pointer; padding: 0 2px; color: var(--faint); }
+.head .x:hover { color: var(--warn); }
+
+/* State reads as one fixed block so nine of them line up down the screen. */
+.head .state {
   margin-left: auto;
+  font-size: 10.5px;
+  color: var(--dim);
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.head .mode {
+  margin-left: 9px;
   cursor: pointer;
-  padding: 1px 7px;
+  padding: 0 6px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 3px;
   font-size: 10px;
-  letter-spacing: .4px;
+  color: var(--faint);
+  letter-spacing: .06em;
 }
-.head .mode:hover { color: var(--fg); border-color: var(--dim); }
-.pane.semantic .head .mode { color: var(--accent); border-color: var(--accent); }
+.head .mode:hover { color: var(--fg); border-color: var(--line-lit); }
+.pane.semantic .head .mode { color: var(--adv); border-color: var(--adv); }
 
-/* ── M3: state, at a glance ───────────────────────────────────────────────
-   Nine panes means nine of these on screen at once, so they have to be legible
-   without being read. Colour does the work; the text is confirmation.          */
-.head .state { margin-left: auto; font-size: 10px; letter-spacing: .2px; color: var(--dim); }
-.head .mode { margin-left: 8px; }
+/* Annunciator states. Steady light — nothing pulses, nothing breathes.
+   The one time this app is allowed to move is never. */
+.pane[data-state="work"]  .dot { background: var(--run); }
+.pane[data-state="work"]  .state { color: var(--run); }
+.pane[data-state="done"]  .dot { background: var(--adv); }
+.pane[data-state="done"]  .state { color: var(--adv); }
+.pane[data-state="idle"]  .dot { background: var(--line-lit); }
+.pane[data-state="idle"]  .state { color: var(--faint); }
+.pane[data-state="ended"] .dot { background: transparent; box-shadow: inset 0 0 0 1px var(--line-lit); }
+.pane[data-state="ended"] .state { color: var(--faint); }
 
-.pane[data-state="work"]  .dot { background: var(--live); }
-.pane[data-state="work"]  .state { color: #6f9c86; }
-.pane[data-state="done"]  .dot { background: #5b9cd6; }
-.pane[data-state="done"]  .state { color: #7db4e6; }
-.pane[data-state="idle"]  .dot { background: #5b606b; }
-.pane[data-state="ended"] .dot { background: #5b606b; }
-.pane[data-state="ended"] .state { color: #5b606b; }
+/* Waiting on you. Amber, steady, and the only pane with a lit edge on the
+   attention side. It states a fact; it does not ask. */
+.pane[data-state="needs"] { border-color: #4a3d2c; }
+.pane[data-state="needs"] .dot { background: var(--attn); }
+.pane[data-state="needs"] .state { color: var(--attn); }
+.pane[data-state="needs"] .head { background: #221d16; }
 
-/* The one state worth interrupting for. Everything else is information; this is
-   a request. It gets the accent colour, the border, and the only animation in
-   the app — spend that budget once, on the thing that costs twelve minutes. */
-.pane[data-state="needs"] { border-color: var(--accent); }
-.pane[data-state="needs"] .state { color: var(--accent); font-weight: 600; }
-.pane[data-state="needs"] .dot { background: var(--accent); animation: breathe 1.9s ease-in-out infinite; }
-@keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 84, 122, .55); }
-  50%      { box-shadow: 0 0 0 5px rgba(214, 84, 122, 0); }
-}
-/* Someone who set reduce-motion has told us pulsing is a problem for them.
-   The colour and the border already carry the whole message. */
-@media (prefers-reduced-motion: reduce) {
-  .pane[data-state="needs"] .dot { animation: none; }
-}
+/* Something happened while you were elsewhere — a mark, not an alarm. */
+.pane.unseen .head .name::before { content: '· '; color: var(--attn); }
 
-/* Cards from an earlier session in this folder: real history, but not this
-   pane's. Dimmed so it never reads as live, since the state chip is deliberately
-   refusing to draw conclusions from it. */
-.pane.borrowed .cards { opacity: .62; }
+.pane.muted .head .name::after { content: ' muted'; color: var(--faint); font-size: 10px; }
 
-#tally { font-size: 11px; color: var(--dim); }
-#tally.alert { color: var(--accent); font-weight: 600; }
+.term { flex: 1; min-height: 0; padding: 3px 2px 2px 6px; }
 
-/* Something happened in a pane you weren't watching. A hairline, not a klaxon:
-   nine of these blinking at once would be worse than the problem it reports. */
-.pane.unseen .dot { box-shadow: 0 0 0 3px rgba(214, 84, 122, .25); }
-
-.term { flex: 1; min-height: 0; padding: 4px 2px 2px 6px; }
-
-/* ── the semantic layer ───────────────────────────────────────────────────
-   Both views stay mounted. The hidden one keeps receiving, so the toggle is a
-   change of reading, never a reload — and xterm keeps its exact scroll state.  */
-.flow { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px 12px; }
+/* ── plain english ──────────────────────────────────────────────────────── */
+.flow { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 7px 10px 12px; }
 .pane.semantic .term { display: none; }
 .pane.semantic .flow { display: block; }
+.pane.borrowed .cards { opacity: .55; }
 
-.flow-status { color: var(--dim); font-size: 11px; font-style: italic; padding: 4px 2px; }
+.flow-status { color: var(--faint); font-size: 10.5px; padding: 3px 2px; }
 
-.card { padding: 6px 0 7px 11px; border-left: 2px solid var(--line); margin-bottom: 7px; }
+.card { padding: 5px 0 6px 10px; border-left: 2px solid var(--line); margin-bottom: 6px; }
 .card-head {
-  display: flex;
-  gap: 7px;
-  align-items: baseline;
-  font-size: 11px;
-  color: var(--dim);
-  margin-bottom: 2px;
+  display: flex; gap: 7px; align-items: baseline;
+  font-size: 10px; color: var(--faint);
+  letter-spacing: .04em; margin-bottom: 2px;
 }
-.card-ts { margin-left: auto; font-size: 10px; opacity: .6; }
-.card-body { font-size: 12px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; word-break: break-word; }
+.card-ts { margin-left: auto; font-size: 10px; }
+/* Prose is proportional. Monospaced paragraphs are a punishment. */
+.card-body {
+  font-family: var(--ui);
+  font-size: 12.5px; line-height: 1.55; color: var(--fg);
+  white-space: pre-wrap; word-break: break-word;
+}
 
-/* Colour carries the speaker, so scanning nine panes doesn't require reading. */
-.card.you    { border-left-color: var(--accent); }
-.card.you    .card-head { color: var(--accent); }
-.card.claude { border-left-color: #5b9cd6; }
-.card.claude .card-head { color: #7db4e6; }
-.card.tool   { border-left-color: #dfa03a; }
-.card.tool   .card-head { color: #dfa03a; }
-.card.tool   .card-body { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; color: #b6bcc7; }
+.card.you    { border-left-color: var(--brand); }
+.card.you    .card-head { color: var(--brand); }
+.card.claude { border-left-color: var(--adv); }
+.card.claude .card-head { color: var(--adv); }
+.card.tool   { border-left-color: var(--attn); }
+.card.tool   .card-head { color: var(--attn); }
+.card.tool   .card-body { font-family: var(--mono); font-size: 11px; color: #b3b1ac; }
 .card.result { border-left-color: var(--line); }
-.card.result .card-body { color: var(--dim); font-size: 11px; }
+.card.result .card-body { color: var(--dim); font-size: 11.5px; }
 
-.flow::-webkit-scrollbar { width: 9px; }
-.flow::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }
 .xterm { height: 100%; }
-.xterm-viewport::-webkit-scrollbar { width: 9px; }
-.xterm-viewport::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line-lit); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
 
-/* ── M4: the command palette ──────────────────────────────────────────────
-   Deliberately the only chord worth memorising. Every other action is reachable
-   by typing three letters, which is what stops a cockpit from turning into a
-   list of shortcuts nobody remembers.                                        */
-#palette, #timeline {
-  position: fixed;
-  inset: 0;
-  display: none;
-  background: rgba(6, 7, 9, .55);
+/* ── overlays ───────────────────────────────────────────────────────────── */
+#palette, #timeline, #sheet {
+  position: fixed; inset: 0; display: none;
+  background: rgba(10, 11, 13, .62);
   z-index: 10;
 }
-#palette.open, #timeline.open { display: block; }
+#sheet { z-index: 11; }
+#palette.open, #timeline.open, #sheet.open { display: block; }
 
-.pal-box {
-  width: min(620px, 92vw);
-  margin: 12vh auto 0;
-  background: #14161b;
-  border: 1px solid #2e3340;
-  border-radius: 10px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, .55);
+.pal-box, .tl-box, .sh-box {
+  background: var(--surface);
+  border: 1px solid var(--line-lit);
+  border-radius: 7px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .6);
   overflow: hidden;
 }
-#pal-input {
-  width: 100%;
-  padding: 13px 15px;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  color: var(--fg);
-  font: inherit;
-  font-size: 14px;
-  outline: none;
+.pal-box { width: min(600px, 92vw); margin: 13vh auto 0; }
+.tl-box, .sh-box {
+  width: min(1080px, 94vw); height: 82vh; margin: 6vh auto 0;
+  display: flex; flex-direction: column;
 }
-#pal-input::placeholder { color: #5b606b; }
+
+#pal-input {
+  width: 100%; padding: 12px 14px;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line);
+  color: var(--fg); font: inherit; font-size: 13px; outline: none;
+}
+#pal-input::placeholder { color: var(--faint); }
 #pal-list { max-height: 46vh; overflow-y: auto; }
 
 .pal-row {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 8px 15px;
-  cursor: pointer;
-  font-size: 12.5px;
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 7px 14px; cursor: pointer; font-size: 12px;
 }
-.pal-row.sel { background: #1d212a; box-shadow: inset 2px 0 0 var(--accent); }
+.pal-row.sel { background: var(--raised); box-shadow: inset 2px 0 0 var(--adv); }
 .pal-text { color: var(--fg); white-space: pre; }
-.pal-hint { margin-left: auto; color: var(--dim); font-size: 10.5px; }
-.pal-ask { padding: 12px 15px; color: var(--dim); font-size: 12px; font-style: italic; }
+.pal-hint { margin-left: auto; color: var(--faint); font-size: 10px; }
+.pal-ask { padding: 11px 14px; color: var(--dim); font-size: 11.5px; }
 
-/* ── M4: the merged timeline ──────────────────────────────────────────────
-   Per-pane views answer "what is this one doing". With five sessions running,
-   the question you actually have is "what happened, in what order" — and that
-   is the one thing a grid of terminals structurally cannot show.             */
-.tl-box {
-  width: min(1100px, 94vw);
-  height: 82vh;
-  margin: 6vh auto 0;
-  display: flex;
-  flex-direction: column;
-  background: #12141a;
-  border: 1px solid #2e3340;
-  border-radius: 10px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, .55);
-  overflow: hidden;
-}
-.tl-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 14px;
-  border-bottom: 1px solid var(--line);
-  font-size: 11px;
-  color: var(--dim);
-  flex: 0 0 auto;
-}
-.tl-title { color: var(--accent); font-weight: 600; letter-spacing: .3px; }
-.tl-close { cursor: pointer; padding: 0 4px; }
-.tl-close:hover { color: var(--accent); }
-
-#tl-body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0 14px; }
-.tl-empty { padding: 24px; text-align: center; color: var(--dim); font-size: 12px; }
-.tl-day {
-  position: sticky;
-  top: 0;
-  background: #12141a;
-  padding: 7px 14px 5px;
-  font-size: 10px;
-  color: #5b606b;
-  letter-spacing: .5px;
-  border-bottom: 1px solid var(--line);
-}
-
-.tl-row {
-  display: grid;
-  grid-template-columns: 46px 130px 150px 1fr;
-  gap: 12px;
-  align-items: baseline;
-  padding: 4px 14px;
-  font-size: 12px;
-  cursor: pointer;
-  border-left: 2px solid transparent;
-}
-.tl-row:hover { background: #171a21; }
-.tl-time { color: #5b606b; font-size: 10.5px; font-variant-numeric: tabular-nums; }
-/* The pane a row came from, so five interleaved sessions stay legible. */
-.tl-pane { color: var(--dim); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-what { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-body { color: #b6bcc7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.tl-row.you    { border-left-color: var(--accent); }
-.tl-row.you    .tl-what, .tl-row.you .tl-body { color: var(--accent); }
-.tl-row.claude { border-left-color: #5b9cd6; }
-.tl-row.claude .tl-what { color: #7db4e6; }
-.tl-row.claude .tl-body { color: var(--fg); }
-.tl-row.tool   { border-left-color: #dfa03a; }
-.tl-row.tool   .tl-what { color: #dfa03a; }
-.tl-row.tool   .tl-body { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }
-.tl-row.result .tl-what, .tl-row.result .tl-body { color: #6a7180; font-size: 11px; }
-
-#tl-body::-webkit-scrollbar, #pal-list::-webkit-scrollbar { width: 9px; }
-#tl-body::-webkit-scrollbar-thumb, #pal-list::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }
-
-/* ── M5: the sheet — changes and search ───────────────────────────────────
-   Same frame as the timeline, different content. Both answer questions the
-   grid of terminals structurally cannot.                                     */
-#sheet { position: fixed; inset: 0; display: none; background: rgba(6,7,9,.55); z-index: 11; }
-#sheet.open { display: block; }
-.sh-box {
-  width: min(1100px, 94vw);
-  height: 82vh;
-  margin: 6vh auto 0;
-  display: flex;
-  flex-direction: column;
-  background: #12141a;
-  border: 1px solid #2e3340;
-  border-radius: 10px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.55);
-  overflow: hidden;
-}
-.sh-head {
+.tl-head, .sh-head {
   display: flex; align-items: baseline; gap: 12px;
   padding: 9px 14px; border-bottom: 1px solid var(--line);
-  font-size: 11px; color: var(--dim); flex: 0 0 auto;
+  font-size: 10.5px; color: var(--dim); flex: 0 0 auto;
 }
-.sh-title { color: var(--accent); font-weight: 600; letter-spacing: .3px; }
-.sh-close { cursor: pointer; padding: 0 4px; }
-.sh-close:hover { color: var(--accent); }
-#sh-body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0 14px; }
-.sh-empty { padding: 22px; text-align: center; color: var(--dim); font-size: 12px; }
-.sh-group {
-  position: sticky; top: 0; background: #12141a;
-  padding: 8px 14px 5px; font-size: 10px; color: #5b606b;
-  letter-spacing: .4px; border-bottom: 1px solid var(--line);
+.tl-title, .sh-title { color: var(--fg); letter-spacing: .06em; }
+.tl-close, .sh-close { cursor: pointer; padding: 0 3px; color: var(--faint); }
+.tl-close:hover, .sh-close:hover { color: var(--fg); }
+
+#tl-body, #sh-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0 14px; }
+.tl-empty, .sh-empty { padding: 22px; text-align: center; color: var(--faint); font-size: 11.5px; }
+.tl-day, .sh-group {
+  position: sticky; top: 0; background: var(--surface);
+  padding: 7px 14px 5px; font-size: 10px; color: var(--faint);
+  letter-spacing: .08em; border-bottom: 1px solid var(--line);
 }
-.sh-back { padding: 7px 14px; font-size: 11px; color: var(--dim); cursor: pointer; }
-.sh-back:hover { color: var(--accent); }
+
+/* ── the ordered timeline ───────────────────────────────────────────────── */
+.tl-row {
+  display: grid; grid-template-columns: 44px 128px 148px 1fr;
+  gap: 12px; align-items: baseline;
+  padding: 3px 14px; font-size: 11.5px; cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.tl-row:hover { background: var(--raised); }
+.tl-time { color: var(--faint); font-size: 10px; }
+.tl-pane { color: var(--faint); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-what { font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-body { color: #b3b1ac; font-family: var(--ui); font-size: 12px;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tl-row.you    { border-left-color: var(--brand); }
+.tl-row.you    .tl-what, .tl-row.you .tl-body { color: var(--brand); }
+.tl-row.claude { border-left-color: var(--adv); }
+.tl-row.claude .tl-what { color: var(--adv); }
+.tl-row.claude .tl-body { color: var(--fg); }
+.tl-row.tool   { border-left-color: var(--attn); }
+.tl-row.tool   .tl-what { color: var(--attn); }
+.tl-row.tool   .tl-body { font-family: var(--mono); font-size: 11px; }
+.tl-row.result .tl-what, .tl-row.result .tl-body { color: var(--faint); font-size: 11px; }
+
+/* ── changes ────────────────────────────────────────────────────────────── */
+.sh-back { padding: 7px 14px; font-size: 10.5px; color: var(--faint); cursor: pointer; }
+.sh-back:hover { color: var(--fg); }
 .sh-input {
-  width: calc(100% - 28px); margin: 10px 14px 6px; padding: 9px 11px;
-  background: #0f1116; border: 1px solid var(--line); border-radius: 6px;
-  color: var(--fg); font: inherit; font-size: 13px; outline: none;
+  width: calc(100% - 28px); margin: 10px 14px 6px; padding: 8px 11px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r);
+  color: var(--fg); font: inherit; font-size: 12.5px; outline: none;
 }
-.sh-input:focus { border-color: var(--accent); }
+.sh-input:focus { border-color: var(--adv); }
 
-/* changed files */
 .diff-row {
-  display: grid; grid-template-columns: 42px 1fr auto auto; gap: 12px;
-  align-items: baseline; padding: 5px 14px; font-size: 12px; cursor: pointer;
+  display: grid; grid-template-columns: 40px 1fr auto auto;
+  gap: 12px; align-items: baseline;
+  padding: 4px 14px; font-size: 11.5px; cursor: pointer;
 }
-.diff-row:hover { background: #171a21; }
-.d-status { color: #dfa03a; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; }
-.d-path { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11.5px;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Which session wrote this file — the part no git client can tell you, because
-   it comes from the transcript, not from the repo. */
-.d-who { font-size: 10px; color: #5b606b; }
-.d-who.attributed { color: #7db4e6; }
-.d-count { font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.diff-row:hover { background: var(--raised); }
+.d-status { color: var(--attn); font-size: 10px; letter-spacing: .06em; }
+.d-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-who { font-size: 10px; color: var(--faint); }
+.d-who.attributed { color: var(--adv); }
+.d-count { font-size: 10px; color: var(--dim); }
 
-.diff-text { padding: 4px 0 10px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 11.5px; }
-.dl { padding: 0 14px; white-space: pre-wrap; word-break: break-word; color: #9aa1ad; }
-.dl.add  { background: rgba(92,186,138,.10); color: #8fd8b0; }
-.dl.del  { background: rgba(224,112,143,.10); color: #ef9db1; }
-.dl.hunk { color: #b98ad6; }
-.dl.meta { color: #5b606b; }
+.diff-text { padding: 4px 0 10px; font-size: 11px; }
+.dl { padding: 0 14px; white-space: pre-wrap; word-break: break-word; color: #9a9ca2; }
+.dl.add  { background: rgba(111, 174, 134, .09); color: #8ec5a4; }
+.dl.del  { background: rgba(201, 114, 127, .09); color: #d69aa4; }
+.dl.hunk { color: var(--adv); }
+.dl.meta { color: var(--faint); }
 
-/* ── M6: why is this file the way it is ───────────────────────────────────
-   git blame answers who and when. It cannot answer why, because the reason was
-   never in the repository — it was in the conversation. This sits above the
-   diff because it is the part you actually came for.                         */
-.why { margin: 4px 14px 10px; padding: 9px 12px; background: #0f1116;
-       border: 1px solid var(--line); border-radius: 7px; }
-.why-head { font-size: 10px; color: var(--accent); letter-spacing: .4px;
-            text-transform: lowercase; margin-bottom: 6px; }
-.why-row { padding: 4px 0 5px 10px; border-left: 2px solid #2b2f38; margin-bottom: 4px; }
-.why-reason { font-size: 12px; line-height: 1.5; color: var(--fg); margin-bottom: 3px; }
-.why-cite { font-size: 10px; color: #5b606b;
-            font-family: "Cascadia Mono", Consolas, monospace; }
+/* ── why is this line here ──────────────────────────────────────────────── */
+.why {
+  margin: 5px 14px 10px; padding: 9px 12px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r);
+}
+.why-head { font-size: 10px; color: var(--attn); letter-spacing: .08em; margin-bottom: 7px; }
+.why-row { padding: 3px 0 5px 10px; border-left: 2px solid var(--line); margin-bottom: 4px; }
+.why-reason { font-family: var(--ui); font-size: 12.5px; line-height: 1.55; color: var(--fg); margin-bottom: 3px; }
+.why-cite { font-size: 10px; color: var(--faint); }
 
-/* A pane deliberately kept out of broadcast. Visibly different, because being
-   surprised that a pane did not receive an instruction is worse than the
-   inconvenience of muting it. */
-.pane.muted .head { background: #16121a; }
-.pane.muted .name::after { content: ' · muted'; color: #b98ad6; font-size: 10px; }
-
-/* search hits — the citation is not decoration, it is the product */
-.hit { padding: 8px 14px 9px; border-left: 2px solid var(--line); margin: 0 0 2px 12px; }
-.hit-body { font-size: 12px; line-height: 1.5; color: var(--fg); }
-.hit-cite { margin-top: 3px; font-size: 10px; color: #5b606b; font-family: "Cascadia Mono", Consolas, monospace; }
-.hit.you    { border-left-color: var(--accent); }
-.hit.claude { border-left-color: #5b9cd6; }
-.hit.tool   { border-left-color: #dfa03a; }
-.hit.tool .hit-body { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; color: #b6bcc7; }
+/* ── search ─────────────────────────────────────────────────────────────── */
+.hit { padding: 7px 14px 8px; border-left: 2px solid var(--line); margin: 0 0 2px 12px; }
+.hit-body { font-family: var(--ui); font-size: 12.5px; line-height: 1.55; color: var(--fg); }
+.hit-cite { margin-top: 3px; font-size: 10px; color: var(--faint); }
+.hit.you    { border-left-color: var(--brand); }
+.hit.claude { border-left-color: var(--adv); }
+.hit.tool   { border-left-color: var(--attn); }
+.hit.tool .hit-body { font-family: var(--mono); font-size: 11px; color: #b3b1ac; }
 .hit.result { border-left-color: var(--line); }
-.hit.result .hit-body { color: var(--dim); font-size: 11px; }
-
-#sh-body::-webkit-scrollbar { width: 9px; }
-#sh-body::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }
-
-#flash { font-size: 11px; color: var(--accent); }
-
-#empty {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--dim);
-  font-size: 13px;
-}
-kbd {
-  background: var(--bar);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font: inherit;
-  font-size: 11px;
-  color: var(--fg);
-}
-
-/* ── M8: the first thing a new machine shows ─────────────────────────────
-   An empty cockpit used to say only that it was empty. On an unfamiliar
-   machine that is the whole first impression, so it teaches instead.       */
-#empty { flex-direction: column; gap: 7px; }
-.e-title { color: var(--fg); font-size: 14px; margin-bottom: 6px; }
-.e-row { color: var(--dim); font-size: 12px; }
-.e-row kbd { margin-right: 8px; }
+.hit.result .hit-body { color: var(--dim); font-size: 11.5px; }
 
 .about-row {
-  display: grid; grid-template-columns: 170px 1fr; gap: 14px;
-  padding: 6px 16px; font-size: 12px;
+  display: grid; grid-template-columns: 168px 1fr; gap: 14px;
+  padding: 5px 16px; font-size: 11.5px;
 }
-.a-k { color: var(--dim); font-size: 11px; }
-.a-v { color: var(--fg); font-family: "Cascadia Mono", Consolas, monospace;
-       font-size: 11px; word-break: break-all; }
+.a-k { color: var(--faint); font-size: 10.5px; letter-spacing: .04em; }
+.a-v { color: var(--fg); font-size: 11px; word-break: break-all; }
+
+/* ── nothing open ───────────────────────────────────────────────────────── */
+#empty {
+  grid-column: 1 / -1;
+  display: flex; flex-direction: column; gap: 6px;
+  align-items: center; justify-content: center;
+}
+.e-title { color: var(--dim); font-size: 12px; letter-spacing: .08em; margin-bottom: 8px; }
+.e-row { color: var(--faint); font-size: 11.5px; }
+.e-row kbd { margin-right: 10px; }
+
+kbd {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font: inherit; font-size: 10.5px;
+  color: var(--dim);
+}
+
+/* Keyboard focus is always visible. A cockpit that cannot be driven from the
+   keyboard is not a cockpit. */
+:focus-visible { outline: 1px solid var(--adv); outline-offset: 1px; }
+
+/* Nothing here animates, so there is nothing to reduce — but a future addition
+   should land inside this guard rather than outside it. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

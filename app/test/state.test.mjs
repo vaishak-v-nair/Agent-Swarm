@@ -46,7 +46,7 @@ test('silence shorter than the threshold is not an alarm', () => {
 test('the bell outranks everything', () => {
   const s = paneState(pane({ bellAt: NOW - 5000, quietSince: 0 }), NOW);
   assert.equal(s.key, 'needs');
-  assert.equal(s.label, 'needs you');
+  assert.equal(s.label, 'waiting');
   assert.equal(s.since, 5000);
 });
 

@@ -34,14 +34,19 @@ let nextId = 1;
 let focused = null;
 let zoomed = null;
 
+/* The terminal is the largest surface in the app, so its palette IS the app's
+ * palette. Warm graphite ground, desaturated signal colours — agent output is
+ * read for hours, and saturated ANSI on pure black is what makes an hour feel
+ * like three. These track the tokens in style.css; changing one without the
+ * other is how a interface stops looking designed and starts looking assembled. */
 const THEME = {
-  background: '#0f1116', foreground: '#d7dbe2', cursor: '#d6547a',
-  selectionBackground: '#2c3140',
-  black: '#0f1116', red: '#e0708f', green: '#5cba8a', yellow: '#dfa03a',
-  blue: '#5b9cd6', magenta: '#b98ad6', cyan: '#4fb6bd', white: '#d7dbe2',
-  brightBlack: '#5b606b', brightRed: '#ef8aa5', brightGreen: '#76d3a3',
-  brightYellow: '#f0b95c', brightBlue: '#7db4e6', brightMagenta: '#cda4e6',
-  brightCyan: '#6fd0d6', brightWhite: '#ffffff',
+  background: '#1b1c21', foreground: '#d8d6d1', cursor: '#d9a05b',
+  cursorAccent: '#1b1c21', selectionBackground: '#33363f',
+  black: '#1b1c21',   red: '#c9727f',  green: '#6fae86', yellow: '#d9a05b',
+  blue: '#7f9dc0',    magenta: '#a98cc0', cyan: '#6aa9a6', white: '#c8c6c1',
+  brightBlack: '#55575e', brightRed: '#d98d97', brightGreen: '#8ec5a4',
+  brightYellow: '#e8bd82', brightBlue: '#9db8d6', brightMagenta: '#c2a9d6',
+  brightCyan: '#8ac4c1', brightWhite: '#f0eeea',
 };
 
 /* ── layout ───────────────────────────────────────────────────────────────
@@ -701,10 +706,10 @@ async function refreshRecipes() {
     // A recipe file you wrote and the app rejected is exactly when silence is
     // worst. Say so on screen, not only in a log nobody is tailing.
     for (const p of got.problems) diag(`recipe problem: ${p}`);
-    if (got.problems.length) flash(`recipe file has ${got.problems.length} problem(s) — ctrl+shift+P`);
+    if (got.problems.length) flash(`swarm file has ${got.problems.length} problem(s) — ctrl+shift+P`);
   } catch (e) {
     diag(`recipes unreadable: ${e}`);
-    flash('could not read recipes');
+    flash('could not read the swarm file');
   }
 }
 
@@ -761,7 +766,7 @@ function actions() {
   for (const name of profiles) {
     list.push({ text: `new pane  ${name}`, hint: name === defaultProfile ? 'ctrl+shift+T' : '', run: () => newPane(name) });
   }
-  list.push({ text: 'save this swarm as a recipe', hint: `${panes.size} panes open`, ask: 'name for this swarm', run: saveSwarmAs });
+  list.push({ text: 'save this swarm', hint: `${panes.size} panes open`, ask: 'name for this swarm', run: saveSwarmAs });
   list.push({ text: 'changes  what actually changed on disk', hint: 'ctrl+shift+D', run: showChanges });
   list.push({ text: 'search  everything ever said here', hint: 'ctrl+shift+F', run: () => showSearch() });
   const claudePanes = [...panes.values()].filter(p => p.alive && p.profile === 'claude');
@@ -920,6 +925,29 @@ const toggleAllModes = () => {
 
 let lastTitle = '';
 
+/** One lamp per pane, in pane order — the whole cockpit as a single row.
+ *  Rebuilt only when the shape or the states actually change, so a 500ms tick
+ *  is not rewriting DOM for nothing. */
+let musterKey = '';
+function renderMuster() {
+  const rail = document.getElementById('muster');
+  if (!rail) return;
+  const states = [...panes.values()].map(p => p.state?.key || 'idle');
+  const key = states.join(',');
+  if (key === musterKey) return;
+  musterKey = key;
+
+  rail.textContent = '';
+  for (const p of panes.values()) {
+    const lamp = document.createElement('span');
+    lamp.className = 'lamp';
+    lamp.dataset.state = p.state?.key || 'idle';
+    lamp.title = `#${p.id} ${p.label || p.profile} — ${p.state?.label || ''}`;
+    lamp.addEventListener('click', () => focus(p.id));
+    rail.appendChild(lamp);
+  }
+}
+
 /* Throughput floor, in decayed bytes. Output decays ~45% per tick, so a pane
    streaming R bytes/sec settles near 1.1·R — this floor is roughly "700 bytes a
    second, sustained". Comfortably above an idle repaint, comfortably below
@@ -953,10 +981,14 @@ function tick() {
     }
   });
 
+  // The muster rail: one lamp per pane, in pane order. With nine sessions this
+  // is the difference between reading the room and auditing nine headers.
+  renderMuster();
+
   const bits = [];
-  if (needs) bits.push(`${needs} needs you`);
-  if (working) bits.push(`${working} working`);
-  tally.textContent = bits.join(' · ');
+  if (needs) bits.push(`${needs} waiting`);
+  if (working) bits.push(`${working} running`);
+  tally.textContent = bits.join('  ');
   tally.classList.toggle('alert', needs > 0);
 
   // The title is the only part of the cockpit visible when AgentSwarm is not the
@@ -964,9 +996,11 @@ function tick() {
   // session count, so a glance at the taskbar is never ambiguous about whether
   // the app is reporting or merely sitting there.
   const n = panes.size;
+  // Reads as a readout, not a plea. No bullet shouting for attention in the
+  // taskbar — the count is the information, and a number is enough.
   const title = needs
-    ? `● ${needs} needs you — AgentSwarm`
-    : n ? `AgentSwarm — ${n} session${n > 1 ? 's' : ''}` : 'AgentSwarm';
+    ? `AgentSwarm · ${needs} waiting`
+    : n ? `AgentSwarm · ${n} session${n > 1 ? 's' : ''}` : 'AgentSwarm';
   if (title !== lastTitle) {
     const rising = needs > 0 && !lastTitle.startsWith('●');
     lastTitle = title;
@@ -1161,8 +1195,11 @@ setInterval(() => {
     p.checked = true;
     diag(`pane ${p.id} (${p.profile}) after 3s: ${p.bytes} bytes received, term ${p.term.cols}x${p.term.rows}`);
     if (p.bytes === 0) {
-      p.term.writeln('\r\n\x1b[31m[agentswarm] this pane started but received no output in 3s.\x1b[0m');
-      p.term.writeln('\x1b[31m            the shell is running; the app is not showing it.\x1b[0m');
+      // Amber, not red, and stated rather than confessed. Red is for something
+      // broken; this is a condition worth knowing about, and the difference
+      // between the two is most of what made the app feel anxious.
+      p.term.writeln('\r\n\x1b[33m' + p.profile + ' started but has produced no output.\x1b[0m');
+      p.term.writeln('\x1b[90mthe process is running — nothing has been written to this pane yet.\x1b[0m');
     }
   });
 }, 1000);
@@ -1236,7 +1273,7 @@ let workdir = null;
   // format better than documentation would.
   try {
     const seeded = await invoke('seed_first_run', { cwd: workdir });
-    if (seeded) { diag(`first run — wrote a starter recipe to ${seeded}`); flash('first run — starter recipe written'); }
+    if (seeded) { diag(`first run — wrote a starter recipe to ${seeded}`); flash('first run — starter swarm written'); }
   } catch (e) { diag(`seed failed: ${e}`); }
   await refreshRecipes();
 
@@ -1258,7 +1295,7 @@ let workdir = null;
   if (wanted) {
     const r = recipes.find(x => x.name === wanted);
     if (r) { await runRecipe(r); return; }
-    flash(`no recipe named "${wanted}"`);
+    flash(`no swarm named "${wanted}"`);
     diag(`--swarm "${wanted}" not found; opening a default pane instead`);
   }
 
