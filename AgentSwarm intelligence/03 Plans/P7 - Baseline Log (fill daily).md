@@ -1,11 +1,32 @@
 ---
 tags: [tournament, baseline, log]
-started: 
+started: 2026-08-01
+ends: 2026-08-07
 ---
 
 # Baseline Week — the log
 
-*Five workdays living on the built-in stack. Log within **5 minutes** of noticing. Thresholds are locked in [[P6 - Baseline Thresholds (locked)|Baseline Thresholds]] — do not adjust them mid-week.*
+**Started 2026-08-01.** Five workdays. Log within **5 minutes** of noticing.
+Thresholds are locked in [[P6 - Baseline Thresholds (locked)|Baseline Thresholds]] — do not adjust them mid-week.
+
+> ### What changed about this week
+>
+> This log was designed to answer *"is the pain real enough to justify building
+> AgentSwarm"*, with a STOP gate if it wasn't. **M1–M4 are already built**, so that
+> gate has been overtaken — it can no longer stop anything.
+>
+> The dimensions are still exactly right, so the week runs unchanged with one
+> addition: every entry now records **which surface** it happened on. AgentSwarm
+> sets `AGENTSWARM` in each pane, so `log` fills that in by itself — nothing extra
+> to remember.
+>
+> The question is now: **is the pain smaller in here than in the plain CLI?**
+> A week that logs plenty of A/C/R incidents *inside AgentSwarm* is not a success
+> for the app. It is the most useful result available, and the one thing no amount
+> of further building can produce.
+>
+> This also runs M1's unrun exit test — *"it is my daily driver and I do not
+> switch back"* — for the first time.
 
 ## Log with one command
 
@@ -34,6 +55,7 @@ Not every annoyance is an incident. If it doesn't fit, write it under Loose obse
 ## Entries
 
 <!-- entries -->
+
 
 
 ---

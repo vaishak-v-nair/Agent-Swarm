@@ -216,6 +216,12 @@ pub fn spawn<S: Sink>(
             cmd.cwd(dir);
         }
     }
+    // Let anything running in a pane know it is in one. The baseline log reads
+    // this to record which surface an incident happened on, which is the whole
+    // comparison the week is for — the same three dimensions, CLI versus here.
+    cmd.env("AGENTSWARM", env!("CARGO_PKG_VERSION"));
+    cmd.env("AGENTSWARM_PANE", id.to_string());
+
     let scrubbed = scrub_session_env(&mut cmd);
     if !scrubbed.is_empty() {
         // Say it out loud. A pane that quietly behaves differently depending on

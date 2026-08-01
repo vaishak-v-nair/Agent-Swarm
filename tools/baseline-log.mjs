@@ -26,7 +26,14 @@ const LABEL = {
 const read = () => fs.readFileSync(FILE, 'utf8');
 const entries = (md) =>
   [...md.matchAll(/^- (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}) · \[(A|C|R|lag)\]([^\n]*)/gm)]
-    .map(m => ({ date: m[1], time: m[2], tag: m[3], rest: m[4] }));
+    .map(m => ({ date: m[1], time: m[2], tag: m[3], rest: m[4],
+                 where: /· in: swarm/.test(m[4]) ? 'swarm' : 'cli' }));
+
+// AgentSwarm sets this in every pane it spawns, so an entry records its own
+// surface without anyone having to remember a flag. The week's question is no
+// longer "is the pain real" — the app is built. It is "is the pain smaller in
+// here", and that only means anything if each incident knows where it happened.
+const WHERE = process.env.AGENTSWARM ? 'swarm' : 'cli';
 
 function tally(md, { full = false } = {}) {
   const all = entries(md);
@@ -43,8 +50,11 @@ function tally(md, { full = false } = {}) {
   console.log(`\n  week so far — day ${days.length} of 5\n`);
   for (const t of ['A', 'C', 'R']) {
     const n = all.filter(e => e.tag === t).length;
+    const cli = all.filter(e => e.tag === t && e.where === 'cli').length;
+    const sw = n - cli;
     const hit = n >= THRESHOLD[t];
-    console.log(`    ${t}  ${String(n).padStart(2)} / ${THRESHOLD[t]}  ${hit ? '✅ PASSES' : '— not yet'}   ${LABEL[t]}`);
+    console.log(`    ${t}  ${String(n).padStart(2)} / ${THRESHOLD[t]}  ${hit ? '✅ PASSES' : '— not yet'}   ` +
+                `cli ${cli} · swarm ${sw}   ${LABEL[t]}`);
   }
   const lag = all.filter(e => e.tag === 'lag').length;
   if (lag) console.log(`    lag ${String(lag).padStart(2)}        (excluded by rule)`);
@@ -85,7 +95,7 @@ if (!text) { console.log('\n  say what happened:  log A glance waited 12 min unn
 const now = new Date();
 const date = now.toISOString().slice(0, 10);
 const time = now.toTimeString().slice(0, 5);
-const line = `- ${date} ${time} · [${tag}]${noticed ? ` · noticed-by: ${noticed}` : ''} · ${text}`;
+const line = `- ${date} ${time} · [${tag}]${noticed ? ` · noticed-by: ${noticed}` : ''} · in: ${WHERE} · ${text}`;
 
 // insert under a per-date heading inside the log section, creating the day if new
 const MARK = '<!-- entries -->';
