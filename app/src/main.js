@@ -284,7 +284,7 @@ async function restartPane(id) {
   // Everything the old process implied is now false.
   p.cols = 0; p.rows = 0; p.bytes = 0;
   p.pending.clear();
-  p.lastByte = 0; p.lastCardAt = 0; p.lastKind = null;
+  p.lastByte = 0; p.lastCardAt = 0; p.lastKind = null; p.lastCard = '';
   p.bellAt = 0; p.burst = 0; p.quietSince = 0; p.own = false;
   p.el.classList.remove('unseen', 'borrowed');
   p.status.textContent = 'watching for a session…';
@@ -326,7 +326,7 @@ async function newPane(profile = 'powershell', opts = {}) {
               status: el.querySelector('.flow-status'),
               modeEl: el.querySelector('.mode'),
               stateEl: el.querySelector('.state'),
-              peekEl: el.querySelector('.peek'), lastLine: '',
+              peekEl: el.querySelector('.peek'), lastLine: '', lastCard: '',
               sem: false, pinned: true, muted: false,
               // M3 state: tools called but not yet finished, keyed by tool_use id
               pending: new Map(), lastByte: 0, lastCardAt: 0, lastKind: null, bellAt: 0,
@@ -1050,8 +1050,9 @@ function tick() {
     p.state = s;
     p.el.dataset.state = s.key;
     p.stateEl.textContent = s.since > 1500 ? `${s.label} · ${fmt(s.since)}` : s.label;
-    if (p.el.classList.contains('carded') && p.peekEl.textContent !== p.lastLine) {
-      p.peekEl.textContent = p.lastLine;
+    if (p.el.classList.contains('carded')) {
+      const peek = p.lastCard || p.lastLine;
+      if (peek && p.peekEl.textContent !== peek) p.peekEl.textContent = peek;
     }
     if (s.key === 'needs') needs++;
     else if (s.key === 'work') working++;
@@ -1128,6 +1129,13 @@ function addCard(c) {
   const p = panes.get(c.pane);
   if (!p) return;
   if (!p.semLive) { p.semLive = true; diag(`pane ${p.id} semantic layer live`); }
+
+  // The folded pane's peek prefers this over the last terminal line. The last
+  // LINE of a full-screen agent is its status footer — "Weekly Reset: 4d18hr" —
+  // which is chrome, not work. A card is the work: what it said, or what it ran.
+  if (c.kind === 'claude' || c.kind === 'tool') {
+    p.lastCard = c.kind === 'tool' ? `${c.title} ${c.body}`.trim() : c.body;
+  }
 
   // M3 bookkeeping. A tool card opens a question; its result closes it. The gap
   // between them, when the terminal is also silent, is where you are the blocker.

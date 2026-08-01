@@ -601,3 +601,20 @@ kbd { border-radius: var(--r-sm); }
   font-size: 10px;
 }
 #profiles button:hover { color: var(--fg); border-color: var(--line); background: var(--raised); }
+
+/* 2. The muster lamps were 11px squares at the far right and still read as a
+      rendering artifact. Squares that small cannot carry five states. Wider
+      bars, next to the wordmark where the eye already is, sized so a row of
+      nine is scannable without being counted. */
+#muster { order: 0; gap: 3px; margin-left: 10px; }
+#muster .lamp {
+  width: 20px; height: 5px; border-radius: 2px;
+  box-shadow: none;
+  opacity: .85;
+}
+#muster .lamp:hover { opacity: 1; }
+#muster .lamp[data-state="idle"]  { background: #33363f; }
+#muster .lamp[data-state="ended"] { background: transparent; box-shadow: inset 0 0 0 1px #33363f; }
+/* Waiting is the one that has to be caught peripherally, so it is the only
+   lamp that is taller than the rest. Shape, not motion. */
+#muster .lamp[data-state="needs"] { height: 9px; margin-top: -2px; opacity: 1; }
