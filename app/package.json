@@ -10,7 +10,8 @@
     "test": "node --test test/*.test.mjs",
     "smoke": "powershell -ExecutionPolicy Bypass -File ../scripts/smoke.ps1",
     "doctor": "src-tauri/target/release/agentswarm.exe --doctor",
-    "verified": "npm test && cd src-tauri && cargo test --lib -- --test-threads=1 && cd .. && npm run smoke"
+    "verified": "npm test && cd src-tauri && cargo test --lib -- --test-threads=1 && cd .. && npm run smoke",
+    "record": "powershell -ExecutionPolicy Bypass -Command \"Add-Type -AssemblyName System.Web; & ../scripts/record.ps1\""
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
