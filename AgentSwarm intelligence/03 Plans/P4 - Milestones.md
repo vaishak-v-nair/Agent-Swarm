@@ -44,6 +44,12 @@ Construction sequence — every milestone ships the same product, more finished.
 - [x] Broadcast opt-out; a muted pane is visibly muted (M5 limit 3)
 - [x] Verified by operating the app. Build log: [[B6 - M6 Why Is This Line Here]]
 
+## M7 — It survives ✅ BUILT 2026-08-01
+- [x] Restart a dead pane in the slot it already occupies
+- [x] Layout written on every change, reopened on next launch, skippable with `--fresh`
+- [x] `.agentswarm/settings.json` — the thresholds are editable the day they are wrong
+- [x] Verified by operating the app, and by a real kill-and-relaunch cycle. Build log: [[B7 - M7 It Survives]]
+
 ## What is built, and what is still unproven
 
 Every milestone has shipped. **Four of the five exit tests have not been run**,
@@ -55,6 +61,7 @@ because all of them require using it for real rather than building more:
 - M4 — met: the morning swarm is one command
 - M5 — every path driven through the harness; no exit test of its own beyond real use
 - M6 — same; the "why" answer is reproducible via examples/whycheck.rs
+- M7 — layout survival proven by killing the app and relaunching it
 
 The baseline week started **2026-08-01**. It is the only thing that will settle
 the four open exit tests, and no further building can substitute for it.
