@@ -1,0 +1,31 @@
+[1:v]trim=13.5:17.5,setpts=PTS-STARTPTS,fps=24,scale=1920:-2,crop=1920:1080:0:60,
+zoompan=z='min(1.0+0.0016*on,1.15)':x='iw/2-(iw/zoom/2)':y='(ih/2-(ih/zoom/2))*0.6':d=1:s=1920x1080:fps=24,setsar=1[s3];
+
+[1:v]trim=4.0:7.6,setpts=PTS-STARTPTS,fps=24,crop=960:540:300:100,scale=1920:1080,zoompan=z='min(1.0+0.0016*on,1.15)':x='(iw-iw/zoom)*0.5':y='(ih-ih/zoom)*0.5':d=1:s=1920x1080:fps=24,setsar=1[s4];
+
+[1:v]trim=19.0:22.6,setpts=PTS-STARTPTS,fps=24,crop=960:540:0:40,scale=1920:1080,zoompan=z='min(1.0+0.0016*on,1.15)':x='(iw-iw/zoom)*0.3':y='(ih-ih/zoom)*0.4':d=1:s=1920x1080:fps=24,setsar=1[s5];
+
+[1:v]trim=33.5:37.3,setpts=PTS-STARTPTS,fps=24,crop=960:540:120:60,scale=1920:1080,zoompan=z='min(1.0+0.0016*on,1.15)':x='(iw-iw/zoom)*0.5':y='(ih-ih/zoom)*0.45':d=1:s=1920x1080:fps=24,setsar=1[s6];
+
+[1:v]trim=39.0:42.8,setpts=PTS-STARTPTS,fps=24,crop=960:540:300:60,scale=1920:1080,zoompan=z='min(1.0+0.0016*on,1.15)':x='(iw-iw/zoom)*0.6':y='(ih-ih/zoom)*0.45':d=1:s=1920x1080:fps=24,setsar=1[s7];
+
+[0:v]trim=0:2.8,setpts=PTS-STARTPTS,
+drawtext=fontfile='C\:/Windows/Fonts/segoeuib.ttf':text='Five agents are working.':fontcolor=0xd8d6d1:fontsize=84:x=(w-tw)/2:y='540-30*min(t/0.5,1)':alpha='min(t/0.45,1)*clip((2.5-t)/0.3,0,1)'[s1];
+
+[0:v]trim=0:2.6,setpts=PTS-STARTPTS,
+drawtext=fontfile='C\:/Windows/Fonts/segoeuib.ttf':text='Which one is waiting on you?':fontcolor=0xd9a05b:fontsize=84:x=(w-tw)/2:y='540-30*min(t/0.5,1)':alpha='min(t/0.45,1)*clip((2.3-t)/0.3,0,1)'[s2];
+
+[0:v]trim=0:5.6,setpts=PTS-STARTPTS,
+drawtext=fontfile='C\:/Windows/Fonts/segoeuib.ttf':text='agentswarm':fontcolor=0xd6547a:fontsize=120:x=(w-tw)/2:y='430-30*min((t-0.2)/0.5,1)':alpha='clip((t-0.2)/0.5,0,1)',
+drawtext=fontfile='C\:/Windows/Fonts/CascadiaMono.ttf':text='agentswarm --doctor':fontcolor=0xd9a05b:fontsize=48:x=(w-tw)/2:y=600:alpha='clip((t-1.2)/0.5,0,1)',
+drawtext=fontfile='C\:/Windows/Fonts/segoeui.ttf':text='the terminal built for agentic coding':fontcolor=0x7d7f86:fontsize=32:x=(w-tw)/2:y=700:alpha='clip((t-2.0)/0.5,0,1)'[s8];
+
+[s1][s2][s3][s4][s5][s6][s7][s8]concat=n=8:v=1:a=0[cut];
+
+[cut]
+drawtext=fontfile='C\:/Windows/Fonts/segoeuib.ttf':text='One command. Your whole swarm.':fontcolor=0xffffff:fontsize=42:x=90:y=h-160:box=1:boxcolor=0x141519@0.80:boxborderw=18:alpha='clip((t-6.0)/0.35,0,1)*clip((9.2-t)/0.35,0,1)',
+drawtext=fontfile='C\:/Windows/Fonts/segoeuib.ttf':text='Real terminals. Real work.':fontcolor=0xffffff:fontsize=42:x=90:y=h-160:box=1:boxcolor=0x141519@0.80:boxborderw=18:alpha='clip((t-9.9)/0.35,0,1)*clip((12.8-t)/0.35,0,1)',
+drawtext=fontfile='C\:/Windows/Fonts/segoeuib.ttf':text='Running. Waiting. Your turn.':fontcolor=0xd9a05b:fontsize=42:x=90:y=h-160:box=1:boxcolor=0x141519@0.80:boxborderw=18:alpha='clip((t-13.5)/0.35,0,1)*clip((16.4-t)/0.35,0,1)',
+drawtext=fontfile='C\:/Windows/Fonts/segoeuib.ttf':text='One key runs everything.':fontcolor=0xffffff:fontsize=42:x=90:y=h-160:box=1:boxcolor=0x141519@0.80:boxborderw=18:alpha='clip((t-17.1)/0.35,0,1)*clip((20.2-t)/0.35,0,1)',
+drawtext=fontfile='C\:/Windows/Fonts/segoeuib.ttf':text='Every session. One timeline.':fontcolor=0xffffff:fontsize=42:x=90:y=h-160:box=1:boxcolor=0x141519@0.80:boxborderw=18:alpha='clip((t-21.0)/0.35,0,1)*clip((24.0-t)/0.35,0,1)',
+fps=24[out]
