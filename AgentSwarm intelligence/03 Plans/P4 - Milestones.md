@@ -37,6 +37,13 @@ Construction sequence — every milestone ships the same product, more finished.
 - [x] Memory across panes — search every transcript, cited to file and line (ctrl+shift+F)
 - [x] **Verified by operating the app**, not by reading its logs. Build log: [[B5 - M5 Drive Review Remember]]
 
+## M6 — It answers why ✅ BUILT 2026-08-01
+- [x] A diff arrives with the conversation that produced it, cited to file and line
+- [x] Attribution reads all history, not just panes open now (M5 limit 1)
+- [x] Search requires every word, and quoting keeps a phrase whole (M5 limit 2)
+- [x] Broadcast opt-out; a muted pane is visibly muted (M5 limit 3)
+- [x] Verified by operating the app. Build log: [[B6 - M6 Why Is This Line Here]]
+
 ## What is built, and what is still unproven
 
 Every milestone has shipped. **Four of the five exit tests have not been run**,
@@ -47,6 +54,7 @@ because all of them require using it for real rather than building more:
 - M3 — "five busy sessions, nothing missed" — needs five real sessions
 - M4 — met: the morning swarm is one command
 - M5 — every path driven through the harness; no exit test of its own beyond real use
+- M6 — same; the "why" answer is reproducible via examples/whycheck.rs
 
 The baseline week started **2026-08-01**. It is the only thing that will settle
 the four open exit tests, and no further building can substitute for it.
