@@ -50,18 +50,26 @@ Construction sequence — every milestone ships the same product, more finished.
 - [x] `.agentswarm/settings.json` — the thresholds are editable the day they are wrong
 - [x] Verified by operating the app, and by a real kill-and-relaunch cycle. Build log: [[B7 - M7 It Survives]]
 
+## M8 — Someone else can run it ✅ BUILT 2026-08-01
+- [x] A real installer: AgentSwarm_0.1.0_x64_en-US.msi (1.8 MB)
+- [x] First run seeds a starter recipe it can actually launch; never overwrites
+- [x] The empty cockpit teaches instead of just being empty; an about entry says where things live
+- [x] A README a teammate can follow. Build log: [[B8 - M8 Someone Else Can Run It]]
+- [x] **Unblocks M2's exit test** — "does one teammate say whoa" is now a question that can be asked
+
 ## What is built, and what is still unproven
 
 Every milestone has shipped. **Four of the five exit tests have not been run**,
 because all of them require using it for real rather than building more:
 
 - M1 — "my daily driver, I do not switch back" — needs a week
-- M2 — "the demo makes one teammate say whoa" — needs a teammate
+- M2 — "the demo makes one teammate say whoa" — **now installable**; needs a teammate
 - M3 — "five busy sessions, nothing missed" — needs five real sessions
 - M4 — met: the morning swarm is one command
 - M5 — every path driven through the harness; no exit test of its own beyond real use
 - M6 — same; the "why" answer is reproducible via examples/whycheck.rs
 - M7 — layout survival proven by killing the app and relaunching it
+- M8 — installer built; first run proven on a folder that had never seen the app
 
 The baseline week started **2026-08-01**. It is the only thing that will settle
 the four open exit tests, and no further building can substitute for it.
