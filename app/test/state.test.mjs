@@ -123,3 +123,16 @@ test('elapsed time reads like a human wrote it', () => {
   assert.equal(fmt(3_600_000), '1h00m');
   assert.equal(fmt(4_920_000), '1h22m');
 });
+
+test('a threshold from the settings file is what actually gets used', () => {
+  // M7: the point of a settings file is that the number in it wins. If tuning
+  // silently did nothing, the file would be worse than no file at all.
+  const p = pane({ pending: tool('Bash', 30_000), quietSince: NOW - 10_000 });
+
+  // 10s of silence trips the 8s default…
+  assert.equal(paneState(p, NOW).key, 'needs');
+  // …and does not trip a 30s threshold the user chose
+  assert.equal(paneState(p, NOW, { stuck_ms: 30_000 }).key, 'work');
+  // an empty tune object falls back to the defaults rather than to zero
+  assert.equal(paneState(p, NOW, {}).key, 'needs');
+});

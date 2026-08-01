@@ -90,6 +90,22 @@
                 kind: 'tool', title: 'Edit', body: payload.path, cwd: CWD,
                 context: 'Now the state machine must refuse to infer from a transcript that is not the pane own.' },
             ]);
+          case 'load_settings':
+            return Promise.resolve({
+              settings: { quiet_ms: 2000, stuck_ms: 30000, burst_floor: 800,
+                          scrollback: 10000, feed_max: 2000, restore_layout: true },
+              source: 'E:/agent-swarm/.agentswarm/settings.json', problem: '',
+            });
+          case 'write_settings_template':
+            return Promise.resolve('E:/agent-swarm/.agentswarm/settings.json');
+          case 'save_layout':
+            window.__savedLayout = payload.panes;
+            return Promise.resolve(null);
+          case 'load_layout':
+            return Promise.resolve(new URLSearchParams(location.search).has('restore') ? [
+              { profile: 'claude', cwd: CWD, label: 'restored-a', args: [] },
+              { profile: 'powershell', cwd: CWD, label: 'restored-b', args: [] },
+            ] : []);
           case 'list_recipes':
             return Promise.resolve({
               problems: [],

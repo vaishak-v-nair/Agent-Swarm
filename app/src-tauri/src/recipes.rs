@@ -132,6 +132,33 @@ pub fn save(cwd: &str, recipe: Recipe) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+fn layout_file(cwd: &str) -> PathBuf {
+    PathBuf::from(cwd).join(".agentswarm").join("last-layout.json")
+}
+
+/// M7 — remember what was open, so closing the app is not the same as losing it.
+///
+/// A layout is an unnamed recipe, so it reuses the same shape: the panes, their
+/// folders, labels and policy. Written on every change rather than on exit,
+/// because a process that crashes never reaches its exit handler and the one
+/// time you most want your layout back is after a crash.
+pub fn save_layout(cwd: &str, panes: Vec<RecipePane>) -> Result<(), String> {
+    let path = layout_file(cwd);
+    let dir = path.parent().ok_or("no parent directory")?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let r = Recipe { name: "last".into(), description: None, panes };
+    let text = serde_json::to_string_pretty(&r).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| e.to_string())
+}
+
+pub fn load_layout(cwd: &str) -> Vec<RecipePane> {
+    std::fs::read_to_string(layout_file(cwd))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Recipe>(&t).ok())
+        .map(|r| r.panes)
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,6 +256,34 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let loaded = load(&dir.to_string_lossy());
         assert!(loaded.problems.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_layout_survives_a_round_trip_and_an_absence() {
+        let dir = std::env::temp_dir().join("agentswarm-layout-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cwd = dir.to_string_lossy().to_string();
+
+        // nothing saved yet is empty, not an error — a first run is normal
+        assert!(load_layout(&cwd).is_empty());
+
+        save_layout(&cwd, vec![
+            RecipePane { profile: "claude".into(), cwd: Some(cwd.clone()),
+                         label: Some("swarm".into()), args: vec!["--permission-mode".into(), "plan".into()] },
+            RecipePane { profile: "powershell".into(), cwd: None, label: None, args: vec![] },
+        ]).unwrap();
+
+        let back = load_layout(&cwd);
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].label.as_deref(), Some("swarm"));
+        assert_eq!(back[0].args, vec!["--permission-mode", "plan"]);
+        assert_eq!(back[1].profile, "powershell");
+
+        // a layout is not a recipe and must never show up in the recipe list
+        assert!(load(&cwd).recipes.is_empty());
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

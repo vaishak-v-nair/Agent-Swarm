@@ -12,6 +12,23 @@ addEventListener('unhandledrejection', e => diag('unhandled rejection: ' + e.rea
 
 const grid = document.getElementById('grid');
 const tally = document.getElementById('tally');
+
+/* M7 — the numbers you are allowed to change.
+ *
+ * M3's thresholds were picked by watching one machine for forty seconds, and the
+ * build log's advice if they ever misfired was "change BURST_FLOOR" — useless,
+ * because that meant editing source and rebuilding. The baseline week is running
+ * now; if the app cries wolf on Tuesday it has to be fixable on Tuesday.
+ *
+ * Defaults live here too, so a missing or broken settings file still runs. */
+const SETTINGS = {
+  quiet_ms: 2000,
+  stuck_ms: 8000,
+  burst_floor: 800,
+  scrollback: 10000,   // bounded on purpose: unbounded scrollback is the memory leak
+  feed_max: 2000,
+  restore_layout: true,
+};
 const panes = new Map();          // id -> { term, fit, el, dot, profile, alive }
 let nextId = 1;
 let focused = null;
@@ -74,7 +91,132 @@ function refit(p) {
  *  is observable without a human squinting at the window. */
 const diag = msg => { invoke('diag', { msg: String(msg) }).catch(() => {}); };
 
-/* ── panes ─────────────────────────────────────────────────────────────── */
+/* ── panes ───────────────────────────────────────────────────────────────
+   Terminal construction and process spawning are separated from newPane so a
+   dead pane can be brought back **in the slot it already occupies**. Closing
+   and reopening would work and would also move it to the end of the grid,
+   which in a nine-pane cockpit means losing the arrangement you built.       */
+function makeTerm(container) {
+  const term = new Terminal({
+    theme: THEME,
+    fontFamily: 'Cascadia Mono, Consolas, monospace',
+    fontSize: 13,
+    cursorBlink: true,
+    scrollback: SETTINGS.scrollback,
+    allowProposedApi: true,
+    macOptionIsMeta: true,
+  });
+  const fit = new FitAddon();
+  term.loadAddon(fit);
+  term.open(container);
+  // GPU rendering. If the context is lost (driver reset, sleep/wake) fall back
+  // to canvas rather than freezing — a dead renderer looks like a hung agent.
+  try {
+    const webgl = new WebglAddon();
+    webgl.onContextLoss(() => webgl.dispose());
+    term.loadAddon(webgl);
+  } catch { /* no WebGL — xterm falls back on its own */ }
+  return { term, fit };
+}
+
+function wireTerm(p) {
+  // The bell is Claude Code asking for you by name — the one unambiguous signal
+  // in the whole stream. xterm surfaces it for us, so we never touch the bytes.
+  p.term.onBell(() => { p.bellAt ||= Date.now(); });
+  // Input goes straight out. It never waits on rendering or on the reader
+  // thread, which is what keeps typing instant while agents flood output.
+  // Typing IS the answer to "does this need you": whatever it was asking, you
+  // are now dealing with it, so the alarm stops.
+  p.term.onData(data => {
+    p.bellAt = 0;
+    p.el.classList.remove('unseen');
+    invoke('pty_write', { id: p.id, data });
+  });
+}
+
+/** Start the process for a pane that already has a terminal. */
+async function spawnPane(p) {
+  // Wait for the pane to actually have a size before spawning, so the shell's
+  // first output lands in a correctly-sized terminal instead of a 1-column one.
+  //
+  // But never wait on rAF alone: a hidden or minimised window does not paint, so
+  // the callback never runs and the await never returns — the pane is built,
+  // looks alive, and no process is ever started. Timers still fire when frames
+  // do not, so the timeout is the escape hatch; the ResizeObserver corrects the
+  // size the moment the window is actually shown.
+  await Promise.race([
+    new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))),
+    new Promise(r => setTimeout(r, 250)),
+  ]);
+  refit(p);
+
+  try {
+    await invoke('pty_spawn', {
+      id: p.id, profile: p.profile, args: p.args,
+      cwd: p.cwd,
+      cols: p.cols || 80,
+      rows: p.rows || 24,
+    });
+    p.alive = true;
+    p.dot.classList.remove('dead');
+    p.born = Date.now();
+    p.checked = false;
+    diag(`pane ${p.id} (${p.label || p.profile}) spawned at ${p.cols || 80}x${p.rows || 24}` +
+         (p.args.length ? ` args=${JSON.stringify(p.args)}` : ''));
+    // The semantic layer is strictly additive: if it never attaches, the terminal
+    // above is untouched and fully usable.
+    if (p.profile === 'claude' && p.cwd) {
+      invoke('sem_attach', { id: p.id, cwd: p.cwd })
+        .catch(e => diag(`sem_attach failed on ${p.id}: ${e}`));
+    } else {
+      p.status.textContent = p.profile === 'claude'
+        ? 'no working folder — nothing to correlate'
+        : `plain english needs a claude session (this pane is ${p.profile})`;
+    }
+  } catch (e) {
+    p.term.writeln(`\r\n\x1b[31mfailed to start ${p.profile}: ${e}\x1b[0m`);
+    diag(`pane ${p.id} (${p.profile}) FAILED to spawn: ${e}`);
+    markDead(p.id);
+  }
+}
+
+/** M7 — bring a pane back without moving it.
+ *
+ *  A session ends: you type /exit, it crashes, the machine sleeps. Before this,
+ *  the only recovery was to close the pane and open a new one, which appends to
+ *  the end of the grid and loses the arrangement. The pane keeps its slot, its
+ *  label, its folder and its policy — only the process is new. */
+async function restartPane(id) {
+  const p = panes.get(id);
+  if (!p) return;
+
+  invoke('pty_kill', { id }).catch(() => {});
+  try { p.ro?.disconnect(); } catch { /* already gone */ }
+  try { p.term.dispose(); } catch { /* already gone */ }
+
+  const box = p.el.querySelector('.term');
+  box.textContent = '';
+  const { term, fit } = makeTerm(box);
+  p.term = term;
+  p.fit = fit;
+  wireTerm(p);
+  p.ro = new ResizeObserver(() => refit(p));
+  p.ro.observe(box);
+
+  // Everything the old process implied is now false.
+  p.cols = 0; p.rows = 0; p.bytes = 0;
+  p.pending.clear();
+  p.lastByte = 0; p.lastCardAt = 0; p.lastKind = null;
+  p.bellAt = 0; p.burst = 0; p.quietSince = 0; p.own = false;
+  p.el.classList.remove('unseen', 'borrowed');
+  p.status.textContent = 'watching for a session…';
+  p.status.style.display = '';
+
+  diag(`pane ${id} restarting`);
+  await spawnPane(p);
+  flash(`#${id} restarted`);
+}
+
 async function newPane(profile = 'powershell', opts = {}) {
   const id = nextId++;
   const label = opts.label || null;
@@ -96,26 +238,7 @@ async function newPane(profile = 'powershell', opts = {}) {
   el.querySelector('.name').title = paneCwd || '';
   grid.appendChild(el);
 
-  const term = new Terminal({
-    theme: THEME,
-    fontFamily: 'Cascadia Mono, Consolas, monospace',
-    fontSize: 13,
-    cursorBlink: true,
-    scrollback: 10000,           // bounded on purpose: unbounded scrollback is the memory leak
-    allowProposedApi: true,
-    macOptionIsMeta: true,
-  });
-  const fit = new FitAddon();
-  term.loadAddon(fit);
-  term.open(el.querySelector('.term'));
-
-  // GPU rendering. If the context is lost (driver reset, sleep/wake) fall back
-  // to canvas rather than freezing — a dead renderer looks like a hung agent.
-  try {
-    const webgl = new WebglAddon();
-    webgl.onContextLoss(() => webgl.dispose());
-    term.loadAddon(webgl);
-  } catch { /* no WebGL — xterm falls back on its own */ }
+  const { term, fit } = makeTerm(el.querySelector('.term'));
 
   const p = { id, term, fit, el, profile, label, cwd: paneCwd, args, alive: true, cols: 0, rows: 0, bytes: 0, born: Date.now(),
               dot: el.querySelector('.dot'),
@@ -131,9 +254,7 @@ async function newPane(profile = 'powershell', opts = {}) {
               own: false };  // not this pane's own session until the watcher says so
   panes.set(id, p);
 
-  // The bell is Claude Code asking for you by name — the one unambiguous signal
-  // in the whole stream. xterm surfaces it for us, so we never touch the bytes.
-  term.onBell(() => { p.bellAt ||= Date.now(); });
+  wireTerm(p);
   p.modeEl.addEventListener('click', e => { e.stopPropagation(); setMode(p, !p.sem); });
   // Stop auto-scrolling the moment the user scrolls up. Yanking someone away from
   // what they are reading is the terminal behaviour this app exists to fix.
@@ -146,55 +267,13 @@ async function newPane(profile = 'powershell', opts = {}) {
   p.ro = new ResizeObserver(() => refit(p));
   p.ro.observe(el.querySelector('.term'));
 
-  // Input goes straight out. It never waits on rendering or on the reader
-  // thread, which is what keeps typing instant while agents flood output.
-  // Typing IS the answer to "does this need you". Whatever it was asking, you
-  // are now dealing with it, so the alarm stops.
-  term.onData(data => { p.bellAt = 0; p.el.classList.remove('unseen'); invoke('pty_write', { id, data }); });
   el.addEventListener('mousedown', () => focus(id));
   el.querySelector('.x').addEventListener('click', e => { e.stopPropagation(); closePane(id); });
 
   relayout();
   focus(id);
-
-  // Wait for the pane to actually have a size before spawning, so the shell's
-  // first output lands in a correctly-sized terminal instead of a 1-column one.
-  //
-  // But never wait on rAF alone: a hidden or minimised window does not paint, so
-  // the callback never runs and the await never returns — the pane is built,
-  // looks alive, and no process is ever started. Launching a swarm and
-  // alt-tabbing immediately was enough to trigger it. Timers still fire when
-  // frames do not, so the timeout is the escape hatch; the ResizeObserver
-  // corrects the size the moment the window is actually shown.
-  await Promise.race([
-    new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))),
-    new Promise(r => setTimeout(r, 250)),
-  ]);
-  refit(p);
-
-  try {
-    await invoke('pty_spawn', {
-      id, profile, args,
-      cwd: paneCwd,
-      cols: p.cols || 80,
-      rows: p.rows || 24,
-    });
-    diag(`pane ${id} (${label || profile}) spawned at ${p.cols || 80}x${p.rows || 24}` +
-         (args.length ? ` args=${JSON.stringify(args)}` : ''));
-    // The semantic layer is strictly additive: if it never attaches, the terminal
-    // above is untouched and fully usable.
-    if (profile === 'claude' && paneCwd) {
-      invoke('sem_attach', { id, cwd: paneCwd }).catch(e => diag(`sem_attach failed on ${id}: ${e}`));
-    } else {
-      p.status.textContent = profile === 'claude'
-        ? 'no working folder — nothing to correlate'
-        : `plain english needs a claude session (this pane is ${profile})`;
-    }
-  } catch (e) {
-    term.writeln(`\r\n\x1b[31mfailed to start ${profile}: ${e}\x1b[0m`);
-    diag(`pane ${id} (${profile}) FAILED to spawn: ${e}`);
-    markDead(id);
-  }
+  await spawnPane(p);
+  rememberLayout();
 }
 
 /* ── M5: drive, review, remember ───────────────────────────────────────────
@@ -220,6 +299,21 @@ function closeSheet() {
   sheetKind = null;
   document.getElementById('sheet').classList.remove('open');
   if (!paletteOpen && !timelineOpen) panes.get(focused)?.term.focus();
+}
+
+/* M7 — remember what was open.
+ *
+ * Written on every change rather than on exit: a process that crashes never
+ * reaches an exit handler, and after a crash is exactly when you want your
+ * arrangement back. Debounced, because opening a recipe fires this per pane. */
+let layoutTimer;
+function rememberLayout() {
+  if (!workdir) return;
+  clearTimeout(layoutTimer);
+  layoutTimer = setTimeout(() => {
+    invoke('save_layout', { cwd: workdir, panes: currentSwarm() })
+      .catch(e => diag(`save_layout failed: ${e}`));
+  }, 400);
 }
 
 /** The distinct folders the open panes are working in. */
@@ -474,7 +568,7 @@ const feed = [];            // every card from every pane, in real-time order
 function addToFeed(c, p) {
   c.at = Date.parse(c.iso) || Date.now();   // undated cards sort as "now", not 1970
   c.label = p.label || p.profile;
-  insertOrdered(feed, c);
+  insertOrdered(feed, c, SETTINGS.feed_max);
   if (timelineOpen) renderTimeline();
 }
 
@@ -543,6 +637,28 @@ function closeTimeline() {
 
 let recipes = [];
 let profiles = ['powershell'];
+let SETTINGS_SOURCE = 'defaults';
+
+async function loadSettings() {
+  if (!workdir) return;
+  try {
+    const got = await invoke('load_settings', { cwd: workdir });
+    Object.assign(SETTINGS, got.settings);
+    SETTINGS_SOURCE = got.source === 'defaults' ? 'defaults' : 'from file';
+    if (got.problem) { diag(`settings problem: ${got.problem}`); flash('settings file is broken — using defaults'); }
+    else if (got.source !== 'defaults') diag(`settings from ${got.source}`);
+  } catch (e) { diag(`settings unreadable: ${e}`); }
+}
+
+/** Put a settings file on disk and say where it is. Nobody tunes a file they
+ *  have to invent from scratch, and "change BURST_FLOOR" is not instructions. */
+async function openSettingsFile() {
+  try {
+    const path = await invoke('write_settings_template', { cwd: workdir });
+    flash(`settings: ${path}`);
+    diag(`settings file at ${path} — edit and restart to apply`);
+  } catch (e) { flash(`could not write settings: ${e}`); }
+}
 
 async function refreshRecipes() {
   if (!workdir) { diag('no working folder — recipes not loaded'); return; }
@@ -640,6 +756,16 @@ function actions() {
   list.push({ text: 'plain english  this pane', hint: 'ctrl+shift+E', run: () => { const p = panes.get(focused); if (p) setMode(p, !p.sem); } });
   list.push({ text: 'plain english  every pane', hint: 'ctrl+shift+A', run: toggleAllModes });
   const fp = panes.get(focused);
+  if (fp && !fp.alive) {
+    list.push({ text: `restart  #${fp.id} ${fp.label || fp.profile}`, hint: 'session ended',
+                run: () => restartPane(fp.id) });
+  }
+  for (const d of panes.values()) {
+    if (d.alive || d.id === focused) continue;
+    list.push({ text: `restart  #${d.id} ${d.label || d.profile}`, hint: 'session ended',
+                run: () => restartPane(d.id) });
+  }
+  list.push({ text: 'settings  edit the thresholds', hint: SETTINGS_SOURCE, run: openSettingsFile });
   if (fp && fp.profile === 'claude') {
     list.push({ text: fp.muted ? `unmute  #${fp.id} for broadcast` : `mute  #${fp.id} from broadcast`,
                 hint: fp.muted ? 'currently muted' : '',
@@ -774,10 +900,10 @@ function tick() {
 
   panes.forEach(p => {
     p.burst *= DECAY;
-    if (p.burst < BURST_FLOOR) p.quietSince ||= now;
+    if (p.burst < SETTINGS.burst_floor) p.quietSince ||= now;
     else p.quietSince = 0;
 
-    const s = paneState(p, now);
+    const s = paneState(p, now, SETTINGS);
     const changed = s.key !== p.state?.key;
     p.state = s;
     p.el.dataset.state = s.key;
@@ -924,6 +1050,7 @@ function closePane(id) {
   p.term.dispose();
   p.el.remove();
   panes.delete(id);
+  rememberLayout();
   if (zoomed === id) zoomed = null;
   relayout();
   if (focused === id) {
@@ -1070,6 +1197,7 @@ let workdir = null;
   try { profiles = await invoke('available_profiles'); } catch { /* keep the default */ }
   if (profiles.includes('claude')) defaultProfile = 'claude';
   try { workdir = await invoke('default_cwd'); } catch { /* panes inherit instead */ }
+  await loadSettings();
   await refreshRecipes();
 
   const bar = document.getElementById('profiles');
@@ -1092,6 +1220,24 @@ let workdir = null;
     if (r) { await runRecipe(r); return; }
     flash(`no recipe named "${wanted}"`);
     diag(`--swarm "${wanted}" not found; opening a default pane instead`);
+  }
+
+  // M7 — reopen what was open. A daily driver that forgets its arrangement every
+  // morning is not a daily driver. Announced rather than silent, and skippable
+  // with --fresh, because a restore nobody asked for is a surprise.
+  const fresh = new URLSearchParams(location.search).has('fresh') ||
+                (await invoke('startup_swarm').catch(() => null)) === 'fresh';
+  if (SETTINGS.restore_layout && !fresh) {
+    let last = [];
+    try { last = await invoke('load_layout', { cwd: workdir }); } catch { /* first run */ }
+    if (last.length) {
+      diag(`reopening ${last.length} pane(s) from last time`);
+      for (const spec of last) {
+        await newPane(spec.profile, { cwd: spec.cwd, args: spec.args, label: spec.label });
+      }
+      flash(`reopened ${last.length} pane${last.length > 1 ? 's' : ''} from last time`);
+      return;
+    }
   }
   newPane(defaultProfile);
 })();

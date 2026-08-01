@@ -22,11 +22,11 @@ export const FEED_MAX = 2000;
  * ties are frequent, and a stable tie-break is what stops a tool call from
  * appearing above the message that requested it.
  */
-export function insertOrdered(feed, card) {
+export function insertOrdered(feed, card, max = FEED_MAX) {
   let i = feed.length;
   while (i > 0 && feed[i - 1].at > card.at) i--;
   feed.splice(i, 0, card);
-  while (feed.length > FEED_MAX) feed.shift();
+  while (feed.length > max) feed.shift();
   return feed;
 }
 

@@ -19,6 +19,11 @@
 export const QUIET_MS = 2000; // below the throughput floor this long = not streaming
 export const STUCK_MS = 8000; // outstanding tool + no real output this long = it's you
 
+/* These are defaults, not law. They were chosen by watching one machine for
+ * forty seconds, and a threshold that decides when to interrupt someone should
+ * be changeable by the person it interrupts — `tune` comes from
+ * .agentswarm/settings.json. See M7. */
+
 /* On "quiet": it means *below a throughput floor*, not "no bytes at all".
  *
  * Claude Code's interface repaints while it sits there — a spinner, a status
@@ -49,9 +54,11 @@ export function oldestPending(pending) {
  * @param now  epoch ms
  * @returns    { key: 'needs'|'work'|'done'|'idle'|'ended', label, since }
  */
-export function paneState(p, now) {
+export function paneState(p, now, tune = {}) {
   if (!p.alive) return { key: 'ended', label: 'ended', since: 0 };
 
+  const quietMs = tune.quiet_ms ?? QUIET_MS;
+  const stuckMs = tune.stuck_ms ?? STUCK_MS;
   const quiet = p.quietSince ? now - p.quietSince : 0;
   const pend = oldestPending(p.pending);
 
@@ -66,11 +73,11 @@ export function paneState(p, now) {
   if (pend && p.own) {
     const waiting = now - pend.at;
     // Called, silent, and not finishing. On this machine that means a prompt.
-    if (quiet > STUCK_MS) return { key: 'needs', label: `waiting · ${pend.name}`, since: waiting };
+    if (quiet > stuckMs) return { key: 'needs', label: `waiting · ${pend.name}`, since: waiting };
     return { key: 'work', label: pend.name, since: waiting };
   }
 
-  if (quiet < QUIET_MS) return { key: 'work', label: 'working', since: 0 };
+  if (quiet < quietMs) return { key: 'work', label: 'working', since: 0 };
 
   // Claude spoke last and nothing has moved since: the turn is over, and the
   // next move is yours. Distinct from 'needs' — nobody is blocked, but it is

@@ -1,6 +1,7 @@
 pub mod git;
 pub mod pty;
 pub mod recipes;
+pub mod settings;
 pub mod transcript;
 
 use pty::{Panes, Sink};
@@ -103,6 +104,30 @@ fn startup_swarm() -> Option<String> {
 #[tauri::command]
 fn save_recipe(cwd: String, recipe: recipes::Recipe) -> Result<String, String> {
     recipes::save(&cwd, recipe).map(|p| p.to_string_lossy().to_string())
+}
+
+/// M7. The thresholds, and where they came from.
+#[tauri::command]
+fn load_settings(cwd: String) -> settings::Loaded {
+    settings::load(&cwd)
+}
+
+/// M7. Put a settings file on disk to edit. Nobody tunes a file they must invent.
+#[tauri::command]
+fn write_settings_template(cwd: String) -> Result<String, String> {
+    settings::write_template(&cwd)
+}
+
+/// M7. Remember what was open. Written on every change, not on exit — a crash
+/// never reaches an exit handler, and that is exactly when you want it back.
+#[tauri::command]
+fn save_layout(cwd: String, panes: Vec<recipes::RecipePane>) -> Result<(), String> {
+    recipes::save_layout(&cwd, panes)
+}
+
+#[tauri::command]
+fn load_layout(cwd: String) -> Vec<recipes::RecipePane> {
+    recipes::load_layout(&cwd)
 }
 
 /// M5. What is different in the working tree for a pane's folder.
@@ -258,6 +283,10 @@ pub fn run() {
             git_file_diff,
             search_history,
             file_history,
+            load_settings,
+            write_settings_template,
+            save_layout,
+            load_layout,
             startup_swarm,
             set_attention,
             diag
