@@ -326,6 +326,73 @@ fn file_name(p: &PathBuf) -> String {
     p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
 }
 
+/* ── the read cache ────────────────────────────────────────────────────────
+   `search` and `touched_by` both walk every transcript in the folder. The UI
+   debounces search at 220ms, so typing a query re-read the entire history from
+   disk once per pause — on this machine that is 13 MB per keystroke-ish, and it
+   grows with every session ever recorded.
+
+   Transcripts are append-only and identified by (mtime, len), so a cached copy
+   is valid until the file actually changes. The live watcher does not use this:
+   it seeks by byte offset and is already incremental.
+
+   Measured first, which changed the design. Caching the *read* bought nothing —
+   the OS had those files in page cache already. The real cost was
+   `to_lowercase()` allocating a fresh String for every line of 21.5 MB on every
+   query: one search took 3.6 seconds. So each line is stored twice, raw and
+   lowered, and the lowering happens once per file rather than once per
+   keystroke. Double the memory for roughly two orders of magnitude of time.   */
+
+/// Each line kept twice: as written, and folded to lowercase for matching.
+pub type Lines = std::sync::Arc<Vec<(String, String)>>;
+
+struct Cached {
+    mtime: SystemTime,
+    len: u64,
+    lines: Lines,
+}
+
+fn cache() -> &'static std::sync::Mutex<(usize, std::collections::HashMap<PathBuf, Cached>)> {
+    static C: std::sync::OnceLock<
+        std::sync::Mutex<(usize, std::collections::HashMap<PathBuf, Cached>)>,
+    > = std::sync::OnceLock::new();
+    C.get_or_init(|| std::sync::Mutex::new((0, std::collections::HashMap::new())))
+}
+
+/// Roughly a large project's full history. Past this the cache is dropped whole
+/// rather than evicted cleverly: transcripts are read in folder-sized batches,
+/// so partial eviction would mostly just re-read the part it dropped.
+const CACHE_CAP: usize = 96 * 1024 * 1024;
+
+/// The lines of a transcript, from memory when the file has not changed.
+fn lines_of(path: &PathBuf) -> Option<Lines> {
+    let meta = std::fs::metadata(path).ok()?;
+    let mtime = meta.modified().ok()?;
+    let len = meta.len();
+
+    let mut guard = cache().lock().ok()?;
+    if let Some(hit) = guard.1.get(path) {
+        if hit.mtime == mtime && hit.len == len {
+            return Some(hit.lines.clone());
+        }
+    }
+    // Read outside the lock would be better; holding it keeps two panes from
+    // reading the same 13 MB file at once, which is the commoner problem.
+    let text = std::fs::read_to_string(path).ok()?;
+    let lines: Lines = std::sync::Arc::new(
+        text.lines().map(|l| (l.to_string(), l.to_lowercase())).collect(),
+    );
+
+    let bytes = len as usize * 2; // raw plus lowered
+    if guard.0 + bytes > CACHE_CAP {
+        guard.1.clear();
+        guard.0 = 0;
+    }
+    guard.0 += bytes;
+    guard.1.insert(path.clone(), Cached { mtime, len, lines: lines.clone() });
+    Some(lines)
+}
+
 /// Tools that write to a file. A pane "touched" a file if one of these named it.
 const EDITORS: &[&str] = &["Write", "Edit", "MultiEdit", "NotebookEdit", "Update"];
 
@@ -348,12 +415,12 @@ pub fn touched_by(cwds: &[String], path: &str, limit: usize) -> Vec<Hit> {
 
     let mut hits = Vec::new();
     for (cwd, file) in transcripts(cwds) {
-        let Ok(text) = std::fs::read_to_string(&file) else { continue };
+        let Some(lines) = lines_of(&file) else { continue };
         let name = file_name(&file);
         // what was being said as we walked; the reason for the edit that follows
         let mut said = String::new();
 
-        for (i, line) in text.lines().enumerate() {
+        for (i, (line, _)) in lines.iter().enumerate() {
             for c in parse_line(0, line) {
                 match c.kind.as_str() {
                     "claude" | "you" => said = c.body.clone(),
@@ -430,12 +497,12 @@ pub fn search(cwds: &[String], query: &str, limit: usize) -> Vec<Hit> {
 
     let mut hits: Vec<Hit> = Vec::new();
     for (cwd, path) in transcripts(cwds) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Some(lines) = lines_of(&path) else { continue };
         let name = file_name(&path);
 
-        for (i, line) in text.lines().enumerate() {
-            // cheap reject before the parse — most lines match nothing
-            let lower = line.to_lowercase();
+        for (i, (line, lower)) in lines.iter().enumerate() {
+            // cheap reject before the parse — most lines match nothing, and the
+            // lowered copy was made once when the file was read
             if !words.iter().all(|w| lower.contains(w)) {
                 continue;
             }
