@@ -11,7 +11,8 @@
     "smoke": "powershell -ExecutionPolicy Bypass -File ../scripts/smoke.ps1",
     "doctor": "src-tauri/target/release/agentswarm.exe --doctor",
     "verified": "npm test && cd src-tauri && cargo test --lib -- --test-threads=1 && cd .. && npm run smoke",
-    "record": "powershell -ExecutionPolicy Bypass -Command \"Add-Type -AssemblyName System.Web; & ../scripts/record.ps1\""
+    "record": "powershell -ExecutionPolicy Bypass -Command \"Add-Type -AssemblyName System.Web; & ../scripts/record.ps1\"",
+    "demo": "src-tauri/target/release/agentswarm.exe --swarm morning --demo"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

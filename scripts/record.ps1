@@ -24,7 +24,7 @@ $root    = Split-Path -Parent $PSScriptRoot
 $exe     = Join-Path $root 'app\src-tauri\target\release\agentswarm.exe'
 $outDir  = Join-Path $root 'app\src-tauri\target\release\recording'
 $frames  = Join-Path $outDir 'frames'
-$seconds = 24
+$seconds = 52
 $fps     = 4
 
 if (-not (Test-Path $exe)) { Write-Host "not built - cd app; npx tauri build --no-bundle" -ForegroundColor Red; exit 1 }
@@ -46,14 +46,18 @@ public class Win {
 '@
 
 Write-Host "AgentSwarm recorder" -ForegroundColor White
-Write-Host "  no input is sent - the app drives itself" -ForegroundColor DarkGray
+Write-Host "  no input is sent - the app drives its own UI from inside" -ForegroundColor DarkGray
 
 Get-Process agentswarm -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 800
 
 $log = Join-Path $env:TEMP 'agentswarm-record.log'
 Remove-Item $log -ErrorAction SilentlyContinue
-$proc = Start-Process -FilePath $exe -ArgumentList '--swarm','morning' `
+# --demo hands the app's own controls to a script on a timer. The first
+# recording was a still because "opening a swarm is self-driving" was wrong:
+# panes spawned and then sat there. Now work actually runs and views actually
+# change, and still not one keystroke leaves this process.
+$proc = Start-Process -FilePath $exe -ArgumentList '--swarm','morning','--demo' `
         -WorkingDirectory $root -PassThru -RedirectStandardOutput $log
 
 # Let the window exist and lay itself out before the first frame.

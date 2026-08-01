@@ -110,6 +110,14 @@ fn startup_swarm() -> Option<String> {
     None
 }
 
+/// `--demo`: the app drives its own UI on a timer so a recording shows work
+/// happening. Driving from outside needs the window focused, and focus belongs
+/// to whoever is using the machine.
+#[tauri::command]
+fn demo_requested() -> bool {
+    std::env::args().skip(1).any(|a| a == "--demo")
+}
+
 /// Keep the swarm currently on screen, under a name. Arranging panes by hand and
 /// then saving beats authoring JSON for a layout you have not tried yet.
 #[tauri::command]
@@ -386,6 +394,7 @@ pub fn run() {
             save_layout,
             load_layout,
             startup_swarm,
+            demo_requested,
             set_attention,
             diag
         ])

@@ -6,6 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { paneState, fmt } from './state.js';
 import { score, insertOrdered } from './order.js';
 import { lastMeaningful } from './peek.js';
+import { runDemo } from './demo.js';
 import '@xterm/xterm/css/xterm.css';
 
 addEventListener('error', e => diag('window error: ' + e.message + ' @' + e.filename + ':' + e.lineno));
@@ -1383,7 +1384,7 @@ let workdir = null;
   try { wanted = await invoke('startup_swarm'); } catch { /* no flag, no problem */ }
   if (wanted) {
     const r = recipes.find(x => x.name === wanted);
-    if (r) { await runRecipe(r); return; }
+    if (r) { await runRecipe(r); await maybeDemo(); return; }
     flash(`no swarm named "${wanted}"`);
     diag(`--swarm "${wanted}" not found; opening a default pane instead`);
   }
@@ -1402,8 +1403,23 @@ let workdir = null;
         await newPane(spec.profile, { cwd: spec.cwd, args: spec.args, label: spec.label });
       }
       flash(`reopened ${last.length} pane${last.length > 1 ? 's' : ''} from last time`);
+      await maybeDemo();
       return;
     }
   }
   newPane(defaultProfile);
+  await maybeDemo();
 })();
+
+/** --demo: hand the app's own controls to a script, so a recording shows the
+ *  product working rather than a window that opened. */
+async function maybeDemo() {
+  let on = false;
+  try { on = await invoke('demo_requested'); } catch { /* not a demo run */ }
+  if (!on) return;
+  await new Promise(r => setTimeout(r, 2500));   // let panes finish spawning
+  await runDemo({
+    flash, diag, setLayout, openTimeline, closeTimeline, openPalette,
+    closePalette, showChanges, closeSheet, setMode, panes, focus, sendTo,
+  });
+}
