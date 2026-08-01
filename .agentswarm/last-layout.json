@@ -3,15 +3,15 @@
   "description": null,
   "panes": [
     {
-      "profile": "mirror",
+      "profile": "claude",
       "cwd": "E:\\agent-swarm",
-      "label": "reads-claude",
+      "label": "swarm",
       "args": []
     },
     {
-      "profile": "unknown",
+      "profile": "powershell",
       "cwd": "E:\\agent-swarm",
-      "label": "no-reader",
+      "label": "shell",
       "args": []
     }
   ]

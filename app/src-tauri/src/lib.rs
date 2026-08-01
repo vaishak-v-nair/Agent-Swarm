@@ -206,11 +206,29 @@ fn file_history(cwds: Vec<String>, path: String, limit: Option<usize>) -> Vec<tr
 fn sem_attach(app: AppHandle, id: u32, cwd: String, profile: Option<String>) {
     // A profile declares where its agent writes. Claude's own location is
     // expressed through the same mechanism rather than as a special case.
-    let (template, format) = profile
-        .and_then(|p| settings::load(&cwd).settings.profiles.remove(&p))
-        .and_then(|p| p.transcript)
-        .map(|t| (t.dir, t.format))
-        .unwrap_or_else(|| (transcript::CLAUDE_DIR.to_string(), "claude-jsonl".to_string()));
+    // A profile gets the semantic layer only if it actually keeps a session
+    // record. M12 removed the frontend's `profile === 'claude'` check and let
+    // everything fall back to Claude's directory, so a plain PowerShell pane
+    // attached to whatever Claude session was newest and displayed another
+    // session's work as its own — a shell pane confidently reporting somebody
+    // else's tool calls is worse than a shell pane reporting nothing.
+    let name = profile.unwrap_or_default();
+    let declared = settings::load(&cwd).settings.profiles.remove(&name).and_then(|p| p.transcript);
+
+    let (template, format) = match declared {
+        Some(t) => (t.dir, t.format),
+        // Claude's own location stays expressed as a template rather than as a
+        // branch in the reader — the M12 property — but it belongs to `claude`.
+        None if name == "claude" => (transcript::CLAUDE_DIR.to_string(), "claude-jsonl".to_string()),
+        None => {
+            let _ = app.emit("sem:status", Status {
+                pane: id,
+                text: format!("{name} keeps no session record — raw output only"),
+                own: false,
+            });
+            return;
+        }
+    };
 
     let Some(dir) = transcript::resolve_dir(&template, &cwd) else {
         let _ = app.emit("sem:status", Status {
