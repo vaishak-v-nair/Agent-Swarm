@@ -86,7 +86,7 @@ fn pty_spawn(
 
 /// M4. The named swarms available from this folder.
 #[tauri::command]
-fn list_recipes(cwd: String) -> recipes::Loaded {
+async fn list_recipes(cwd: String) -> recipes::Loaded {
     recipes::load(&cwd)
 }
 
@@ -142,7 +142,7 @@ fn about() -> serde_json::Value {
 
 /// M7. The thresholds, and where they came from.
 #[tauri::command]
-fn load_settings(cwd: String) -> settings::Loaded {
+async fn load_settings(cwd: String) -> settings::Loaded {
     settings::load(&cwd)
 }
 
@@ -164,15 +164,23 @@ fn load_layout(cwd: String) -> Vec<recipes::RecipePane> {
     recipes::load_layout(&cwd)
 }
 
+/// Async so it never runs on the main thread.
+///
+/// Tauri runs a synchronous command on the UI thread. Every heavy command here
+/// was synchronous, so reading 21.5 MB of transcripts or shelling out to git
+/// froze the window — which Windows reports, correctly, as "not responding".
+/// Nothing was slow enough to notice in a benchmark and everything was slow
+/// enough to stall a repaint.
+///
 /// M5. What is different in the working tree for a pane's folder.
 #[tauri::command]
-fn git_changes(cwd: String) -> git::Changes {
+async fn git_changes(cwd: String) -> git::Changes {
     git::changes(&cwd)
 }
 
 /// M5. The unified diff for one file.
 #[tauri::command]
-fn git_file_diff(cwd: String, path: String, untracked: bool) -> String {
+async fn git_file_diff(cwd: String, path: String, untracked: bool) -> String {
     git::file_diff(&cwd, &path, untracked)
 }
 
@@ -183,7 +191,7 @@ fn git_file_diff(cwd: String, path: String, untracked: bool) -> String {
 /// and every hit carries the transcript file and line, so the answer can be
 /// checked rather than believed.
 #[tauri::command]
-fn search_history(cwds: Vec<String>, query: String, limit: Option<usize>) -> Vec<transcript::Hit> {
+async fn search_history(cwds: Vec<String>, query: String, limit: Option<usize>) -> Vec<transcript::Hit> {
     transcript::search(&cwds, &query, limit.unwrap_or(60))
 }
 
@@ -193,7 +201,7 @@ fn search_history(cwds: Vec<String>, query: String, limit: Option<usize>) -> Vec
 /// what was being said just before each one, across all history rather than only
 /// the sessions this app happened to have open.
 #[tauri::command]
-fn file_history(cwds: Vec<String>, path: String, limit: Option<usize>) -> Vec<transcript::Hit> {
+async fn file_history(cwds: Vec<String>, path: String, limit: Option<usize>) -> Vec<transcript::Hit> {
     transcript::touched_by(&cwds, &path, limit.unwrap_or(40))
 }
 

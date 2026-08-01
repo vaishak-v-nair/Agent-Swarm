@@ -343,7 +343,16 @@ async function newPane(profile = 'powershell', opts = {}) {
   p.ro.observe(el.querySelector('.term'));
 
   el.addEventListener('mousedown', () => focus(id));
-  el.querySelector('.x').addEventListener('click', e => { e.stopPropagation(); closePane(id); });
+  // Close on mousedown, and stop the pane's own mousedown from running first.
+  //
+  // This was broken in the rail: the pane focuses on mousedown, and in stage
+  // focusing re-parents the pane into the stage container. The element moved out
+  // from under the cursor before mouseup, so the browser never produced a click
+  // and the handler that was listening for one never ran. Nothing was wrong with
+  // the button; it was being moved away mid-press.
+  const close = el.querySelector('.x');
+  close.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
+  close.addEventListener('click', e => { e.stopPropagation(); closePane(id); });
 
   relayout();
   focus(id);
