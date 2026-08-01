@@ -64,6 +64,13 @@ Construction sequence — every milestone ships the same product, more finished.
 - [x] The muster rail: every pane as one lamp, in pane order
 - [x] Verified through the harness. Build log: [[B9 - M9 An Instrument Not An Assistant]]
 
+## M10 — Stage ✅ BUILT 2026-08-01
+- [x] The pane you are reading gets the whole room; the rest are live cards in a rail
+- [x] Panes move between containers, never rebuilt — scrollback and process survive
+- [x] Smoother surface: 10px radii, translucent panels, macOS decelerate transitions
+- [x] Chrome proportional, data mono (reverses M9, on purpose)
+- [x] Motion rule refined: transitions explain change; nothing loops. Build log: [[B10 - M10 Stage]]
+
 ## What is built, and what is still unproven
 
 Every milestone has shipped. **Four of the five exit tests have not been run**,
@@ -78,6 +85,7 @@ because all of them require using it for real rather than building more:
 - M7 — layout survival proven by killing the app and relaunching it
 - M8 — installer built; first run proven on a folder that had never seen the app
 - M9 — design and language pass; came from the one source that produces this feedback: somebody looking at it
+- M10 — the grid premise was wrong: you read one session and monitor the rest
 
 The baseline week started **2026-08-01**. It is the only thing that will settle
 the four open exit tests, and no further building can substitute for it.
