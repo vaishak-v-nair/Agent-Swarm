@@ -1,3 +1,4 @@
+pub mod doctor;
 pub mod git;
 pub mod pty;
 pub mod recipes;
@@ -349,6 +350,14 @@ fn which(bin: &str) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // --doctor prints and exits. No window: it has to work when the window is
+    // exactly what is broken, and the smoke test calls it before driving the UI.
+    if doctor::requested() {
+        let cwd = doctor::cwd_or_here();
+        let ok = doctor::print(&cwd.to_string_lossy());
+        std::process::exit(if ok { 0 } else { 1 });
+    }
+
     tauri::Builder::default()
         .setup(|app| {
             app.manage(AppState {
