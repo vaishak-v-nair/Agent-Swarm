@@ -149,6 +149,80 @@ fn about() -> serde_json::Value {
     })
 }
 
+/// A terminal without copy and paste is not a terminal. Both go through Rust
+/// rather than the webview clipboard API, which needs permissions WebView2 does
+/// not reliably grant. Async: clipboard access can block on another app holding
+/// the clipboard open, and the UI thread must never wait on that.
+#[tauri::command]
+async fn clip_write(text: String) -> Result<(), String> {
+    arboard::Clipboard::new()
+        .and_then(|mut c| c.set_text(text))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn clip_read() -> Result<String, String> {
+    arboard::Clipboard::new()
+        .and_then(|mut c| c.get_text())
+        .map_err(|e| e.to_string())
+}
+
+/// Is this something we are willing to hand to the OS as a URL?
+///
+/// Terminal output is untrusted by definition — an agent might print anything.
+/// Only http(s), no whitespace or quotes, bounded length. `file://` and
+/// `javascript:` are exactly the schemes a hostile string would want.
+fn url_ok(u: &str) -> bool {
+    (u.starts_with("https://") || u.starts_with("http://"))
+        && u.len() > 10
+        && u.len() < 2048
+        && !u.chars().any(|c| c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | '`'))
+}
+
+/// Open a link from the terminal in the default browser.
+///
+/// rundll32 receives the URL as an argument — no shell, so nothing in the
+/// string is ever parsed as a command. `cmd /C start` would be, which is how a
+/// printed `&` becomes an executed one.
+#[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    if !url_ok(&url) {
+        return Err(format!("refusing to open: {url}"));
+    }
+    std::process::Command::new("rundll32.exe")
+        .args(["url.dll,FileProtocolHandler", &url])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Scalar settings from the in-app sheet. Everything the form does not know
+/// about — profiles above all — survives, because the write goes through
+/// settings::update rather than serializing the form.
+#[tauri::command]
+async fn save_settings(
+    cwd: String,
+    quiet_ms: u64,
+    stuck_ms: u64,
+    burst_floor: u64,
+    scrollback: u32,
+    feed_max: u32,
+    restore_layout: bool,
+    layout: String,
+) -> Result<String, String> {
+    settings::update(&cwd, |s| {
+        s.quiet_ms = quiet_ms;
+        s.stuck_ms = stuck_ms;
+        s.burst_floor = burst_floor;
+        s.scrollback = scrollback;
+        s.feed_max = feed_max;
+        s.restore_layout = restore_layout;
+        if layout == "stage" || layout == "grid" {
+            s.layout = layout;
+        }
+    })
+}
+
 /// M7. The thresholds, and where they came from.
 #[tauri::command]
 async fn load_settings(cwd: String) -> settings::Loaded {
@@ -390,6 +464,10 @@ pub fn run() {
             seed_first_run,
             about,
             load_settings,
+            save_settings,
+            clip_write,
+            clip_read,
+            open_url,
             write_settings_template,
             save_layout,
             load_layout,
@@ -400,4 +478,22 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentSwarm");
+}
+
+#[cfg(test)]
+mod lib_tests {
+    use super::url_ok;
+
+    #[test]
+    fn only_plain_web_urls_are_opened() {
+        assert!(url_ok("https://github.com/yc-software/qm"));
+        assert!(url_ok("http://localhost:1420/harness.html"));
+        // terminal output is untrusted; these are the strings that matter
+        assert!(!url_ok("file:///C:/Windows/System32/calc.exe"));
+        assert!(!url_ok("javascript:alert(1)"));
+        assert!(!url_ok("https://x.com/a b"));            // whitespace
+        assert!(!url_ok("https://x.com/\"quote"));         // quote
+        assert!(!url_ok(""));
+        assert!(!url_ok(&("https://x.com/".to_string() + &"a".repeat(3000))));
+    }
 }

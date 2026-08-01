@@ -117,6 +117,17 @@
               config_dir: CWD + '\\.agentswarm',
               transcripts: 'C:\\Users\\you\\.claude\\projects\\E--agent-swarm',
             });
+          case 'clip_write':
+            window.__clipboard = payload.text;
+            return Promise.resolve(null);
+          case 'clip_read':
+            return Promise.resolve(window.__clipboard ?? 'from-clipboard');
+          case 'open_url':
+            window.__opened = (window.__opened || []).concat(payload.url);
+            return Promise.resolve(null);
+          case 'save_settings':
+            window.__savedSettings = payload;
+            return Promise.resolve(CWD + '\\.agentswarm\\settings.json');
           case 'list_recipes':
             return Promise.resolve({
               problems: [],

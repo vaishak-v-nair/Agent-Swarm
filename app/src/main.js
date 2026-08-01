@@ -3,6 +3,8 @@ import { listen } from '@tauri-apps/api/event';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { SearchAddon } from '@xterm/addon-search';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { paneState, fmt } from './state.js';
 import { score, insertOrdered } from './order.js';
 import { lastMeaningful } from './peek.js';
@@ -76,8 +78,33 @@ const stageEl = document.getElementById('stage');
 const emptyEl = document.getElementById('empty');
 
 let layout = 'grid';   // overridden from settings at boot
+let stagePinned = null; // a second pane sharing the stage, or null
 
 const stageActive = () => layout === 'stage' && panes.size > 1;
+
+/** Set the pin directly — one relayout, no focus dance.
+ *
+ *  The demo's first pin beat did focus(b); pinToggle(); focus(a), which
+ *  re-parented a WebGL canvas twice in the same tick — stage to rail to stage —
+ *  and the WebView2 renderer died to a white window, taking the rest of the
+ *  recording with it. Panes must move at most once per layout change. */
+function setPin(id) {
+  stagePinned = id;
+  relayout();
+}
+
+/** Keep this pane on stage while reading others — or release it. */
+function pinToggle() {
+  if (!stageActive()) { flash('pinning needs stage layout'); return; }
+  if (stagePinned === focused) {
+    stagePinned = null;
+    flash('unpinned');
+  } else {
+    stagePinned = focused;
+    flash('pinned — switch panes and this one stays');
+  }
+  relayout();
+}
 
 function relayout() {
   const n = panes.size;
@@ -95,10 +122,16 @@ function relayout() {
   }
 
   if (stageActive()) {
+    // A pinned pane shares the stage with the focused one — the two-agent
+    // comparison Windows Terminal does with split panes. Two, deliberately, not
+    // a split tree: at three the panes are back to being too small to read,
+    // which is the problem stage exists to solve.
+    if (stagePinned != null && !panes.get(stagePinned)?.alive) stagePinned = null;
     for (const p of panes.values()) {
-      const home = p.id === focused ? stageEl : railEl;
+      const onStage = p.id === focused || p.id === stagePinned;
+      const home = onStage ? stageEl : railEl;
       if (p.el.parentElement !== home) home.appendChild(p.el);
-      p.el.classList.toggle('carded', p.id !== focused);
+      p.el.classList.toggle('carded', !onStage);
     }
   } else {
     const cols = n === 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
@@ -193,13 +226,49 @@ function makeTerm(container) {
     webgl.onContextLoss(() => webgl.dispose());
     term.loadAddon(webgl);
   } catch { /* no WebGL — xterm falls back on its own */ }
-  return { term, fit };
+
+  // Find in scrollback — the thing you reach for when a build error scrolled
+  // past three minutes ago.
+  const search = new SearchAddon();
+  term.loadAddon(search);
+
+  // Links open through Rust, which validates the URL before the OS sees it.
+  // Terminal output is untrusted by definition; the webview must never be the
+  // thing that decides a printed string is safe to launch.
+  term.loadAddon(new WebLinksAddon((e, uri) => {
+    invoke('open_url', { url: uri }).catch(err => flash(`not opening that: ${err}`));
+  }));
+
+  return { term, fit, search };
 }
 
 function wireTerm(p) {
   // The bell is Claude Code asking for you by name — the one unambiguous signal
   // in the whole stream. xterm surfaces it for us, so we never touch the bytes.
   p.term.onBell(() => { p.bellAt ||= Date.now(); });
+
+  // Copy and paste, the terminal convention: ctrl+shift+C / ctrl+shift+V.
+  // Plain ctrl+C stays what it has always been in a terminal — the interrupt.
+  // Handled here, before xterm, so the keys never reach the PTY as bytes.
+  p.term.attachCustomKeyEventHandler(e => {
+    if (e.type !== 'keydown' || !e.ctrlKey || !e.shiftKey) return true;
+    if (e.key === 'C' || e.key === 'c') {
+      const sel = p.term.getSelection();
+      if (sel) {
+        e.preventDefault();
+        invoke('clip_write', { text: sel })
+          .then(() => flash('copied'))
+          .catch(err => flash(`copy failed: ${err}`));
+      }
+      return false;   // with no selection, copy is a no-op — never a stray byte
+    }
+    if (e.key === 'V' || e.key === 'v') {
+      e.preventDefault();
+      pasteInto(p);
+      return false;
+    }
+    return true;
+  });
   // Input goes straight out. It never waits on rendering or on the reader
   // thread, which is what keeps typing instant while agents flood output.
   // Typing IS the answer to "does this need you": whatever it was asking, you
@@ -209,6 +278,39 @@ function wireTerm(p) {
     p.el.classList.remove('unseen');
     invoke('pty_write', { id: p.id, data });
   });
+}
+
+/** Paste is typing: it answers whatever the pane was waiting on, so the alarm
+ *  clears the same way a keystroke clears it. */
+function pasteInto(p) {
+  invoke('clip_read')
+    .then(text => {
+      if (!text) return;
+      p.bellAt = 0;
+      p.el.classList.remove('unseen');
+      invoke('pty_write', { id: p.id, data: text });
+    })
+    .catch(err => flash(`paste failed: ${err}`));
+}
+
+/* ── find in scrollback ────────────────────────────────────────────────────
+   ctrl+shift+S on the focused pane. The error that scrolled past three minutes
+   ago is the whole use case, so this searches the buffer xterm already holds —
+   nothing is re-read, nothing leaves the pane. */
+function openFind(p) {
+  if (!p) return;
+  const bar = p.el.querySelector('.find');
+  bar.classList.add('open');
+  const input = bar.querySelector('input');
+  input.value = '';
+  input.focus();
+}
+
+function closeFind(p) {
+  if (!p) return;
+  p.el.querySelector('.find').classList.remove('open');
+  p.search.clearDecorations?.();
+  if (!p.sem) p.term.focus();
 }
 
 /** Start the process for a pane that already has a terminal. */
@@ -274,8 +376,9 @@ async function restartPane(id) {
 
   const box = p.el.querySelector('.term');
   box.textContent = '';
-  const { term, fit } = makeTerm(box);
+  const { term, fit, search } = makeTerm(box);
   p.term = term;
+  p.search = search;
   p.fit = fit;
   wireTerm(p);
   p.ro = new ResizeObserver(() => refit(p));
@@ -311,15 +414,17 @@ async function newPane(profile = 'powershell', opts = {}) {
     `<span class="x" title="close">✕</span></div>` +
     `<div class="term"></div>` +
     `<div class="flow"><div class="flow-status">watching for a session…</div><div class="cards"></div></div>` +
-    `<div class="peek"></div>`;
+    `<div class="peek"></div>` +
+    `<div class="find"><input placeholder="find in this pane" spellcheck="false">` +
+    `<span class="find-x" title="close (esc)">✕</span></div>`;
   // textContent, not template interpolation: a label comes from a recipe file
   el.querySelector('.name').textContent = label || profile;
   el.querySelector('.name').title = paneCwd || '';
   grid.appendChild(el);
 
-  const { term, fit } = makeTerm(el.querySelector('.term'));
+  const { term, fit, search } = makeTerm(el.querySelector('.term'));
 
-  const p = { id, term, fit, el, profile, label, cwd: paneCwd, args, alive: true, cols: 0, rows: 0, bytes: 0, born: Date.now(),
+  const p = { id, term, fit, search, el, profile, label, cwd: paneCwd, args, alive: true, cols: 0, rows: 0, bytes: 0, born: Date.now(),
               dot: el.querySelector('.dot'),
               flow: el.querySelector('.flow'),
               cards: el.querySelector('.cards'),
@@ -358,6 +463,37 @@ async function newPane(profile = 'powershell', opts = {}) {
   const close = el.querySelector('.x');
   close.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
   close.addEventListener('click', e => { e.stopPropagation(); closePane(id); });
+
+  // Right-click: copy the selection if there is one, paste if there is not.
+  // Windows Terminal's behaviour, because that is the muscle memory people
+  // arrive with. No context menu — a terminal's right-click is an action.
+  el.querySelector('.term').addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const sel = p.term.getSelection();
+    if (sel) {
+      invoke('clip_write', { text: sel }).then(() => { p.term.clearSelection(); flash('copied'); })
+        .catch(err => flash(`copy failed: ${err}`));
+    } else {
+      pasteInto(p);
+    }
+  });
+
+  // The find bar. Enter walks forward, shift+enter walks back, esc closes.
+  // Keys are stopped here so typing a query never triggers the app's chords.
+  {
+    const bar = el.querySelector('.find');
+    const input = bar.querySelector('input');
+    input.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { e.preventDefault(); closeFind(p); }
+      else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); p.search.findPrevious(input.value); }
+      else if (e.key === 'Enter') { e.preventDefault(); p.search.findNext(input.value); }
+    });
+    input.addEventListener('input', () => {
+      if (input.value) p.search.findNext(input.value, { incremental: true });
+    });
+    bar.querySelector('.find-x').addEventListener('click', () => closeFind(p));
+  }
 
   relayout();
   focus(id);
@@ -731,6 +867,94 @@ let SETTINGS_SOURCE = 'defaults';
 /** M8 — what this is and where it keeps things. On an unfamiliar machine the
  *  first question is "where does this store my stuff", and the answer should not
  *  require reading the source. */
+/* ── the settings sheet ────────────────────────────────────────────────────
+   "Edit this JSON file and restart" is not a settings story. The sheet edits
+   the scalar fields in place; the save goes through Rust's settings::update,
+   which merges over the file on disk — so profiles written by hand survive a
+   save from a form that has never heard of them.                             */
+const SETTING_FIELDS = [
+  ['quiet_ms',    'quiet after (ms)',    'below the output floor this long = not working'],
+  ['stuck_ms',    'waiting after (ms)',  'a silent tool call this long = waiting on you — raise this if the app cries wolf'],
+  ['burst_floor', 'output floor (bytes)','decayed bytes that count as progress, not a repaint'],
+  ['scrollback',  'scrollback (lines)',  'kept per pane; applies to new panes'],
+  ['feed_max',    'timeline cards',      'kept by the merged timeline'],
+];
+
+async function showSettings() {
+  openSheet('settings', 'settings', SETTINGS_SOURCE);
+  const body = document.getElementById('sh-body');
+  body.textContent = '';
+
+  const form = document.createElement('div');
+  form.className = 'set-form';
+
+  const inputs = {};
+  for (const [key, label, help] of SETTING_FIELDS) {
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    row.innerHTML = '<label></label><input type="number" min="1"><span class="set-help"></span>';
+    row.querySelector('label').textContent = label;
+    const inp = row.querySelector('input');
+    inp.value = SETTINGS[key];
+    row.querySelector('.set-help').textContent = help;
+    inputs[key] = inp;
+    form.appendChild(row);
+  }
+
+  const layoutRow = document.createElement('div');
+  layoutRow.className = 'set-row';
+  layoutRow.innerHTML =
+    '<label>layout</label><select><option value="stage">stage</option><option value="grid">grid</option></select>' +
+    '<span class="set-help">stage: one pane at reading size · grid: every pane tiled</span>';
+  const layoutSel = layoutRow.querySelector('select');
+  layoutSel.value = layout;
+  form.appendChild(layoutRow);
+
+  const restoreRow = document.createElement('div');
+  restoreRow.className = 'set-row';
+  restoreRow.innerHTML =
+    '<label>reopen panes</label><input type="checkbox"><span class="set-help">bring back what was open, next launch</span>';
+  const restoreChk = restoreRow.querySelector('input');
+  restoreChk.checked = SETTINGS.restore_layout;
+  form.appendChild(restoreRow);
+
+  const actions = document.createElement('div');
+  actions.className = 'set-actions';
+  const save = document.createElement('button');
+  save.className = 'set-save';
+  save.textContent = 'save';
+  const note = document.createElement('span');
+  note.className = 'set-help';
+  note.textContent = 'profiles and swarms stay in .agentswarm/ — a save here never touches them';
+  actions.append(save, note);
+  form.appendChild(actions);
+  body.appendChild(form);
+
+  save.addEventListener('click', async () => {
+    const vals = {};
+    for (const [key] of SETTING_FIELDS) {
+      const n = Number(inputs[key].value);
+      if (!Number.isFinite(n) || n < 1) { flash(`${key} needs a positive number`); return; }
+      vals[key] = Math.floor(n);
+    }
+    try {
+      const path = await invoke('save_settings', {
+        cwd: workdir,
+        quietMs: vals.quiet_ms, stuckMs: vals.stuck_ms, burstFloor: vals.burst_floor,
+        scrollback: vals.scrollback, feedMax: vals.feed_max,
+        restoreLayout: restoreChk.checked, layout: layoutSel.value,
+      });
+      Object.assign(SETTINGS, vals, { restore_layout: restoreChk.checked, layout: layoutSel.value });
+      SETTINGS_SOURCE = 'from file';
+      if (layoutSel.value !== layout) setLayout(layoutSel.value);
+      closeSheet();
+      flash(`saved — thresholds apply now (${path})`);
+    } catch (e) {
+      flash(`could not save: ${e}`);
+    }
+  });
+}
+
 async function showAbout() {
   let info = {};
   try { info = await invoke('about'); } catch (e) { diag(`about failed: ${e}`); }
@@ -881,7 +1105,18 @@ function actions() {
     list.push({ text: `restart  #${d.id} ${d.label || d.profile}`, hint: 'session ended',
                 run: () => restartPane(d.id) });
   }
-  list.push({ text: 'settings  edit the thresholds', hint: SETTINGS_SOURCE, run: openSettingsFile });
+  const fpane = panes.get(focused);
+  if (fpane) {
+    list.push({ text: `find  in #${fpane.id} ${fpane.label || fpane.profile}`, hint: 'ctrl+shift+S',
+                run: () => openFind(fpane) });
+  }
+  if (stageActive() && fpane) {
+    list.push({ text: stagePinned === focused ? 'unpin  release this pane from the stage'
+                                              : 'pin  keep this pane on stage while reading others',
+                hint: 'ctrl+shift+O', run: pinToggle });
+  }
+  list.push({ text: 'settings  edit the thresholds', hint: SETTINGS_SOURCE, run: showSettings });
+  list.push({ text: 'settings file  open the folder it lives in', hint: '.agentswarm', run: openSettingsFile });
   list.push({ text: 'about  version and where things live', run: showAbout });
   if (fp && fp.profile === 'claude') {
     list.push({ text: fp.muted ? `unmute  #${fp.id} for broadcast` : `mute  #${fp.id} from broadcast`,
@@ -1343,6 +1578,8 @@ addEventListener('keydown', e => {
   else if (k === 'd') { hit(); sheetOpen && sheetKind === 'diff' ? closeSheet() : showChanges(); }
   else if (k === 'f') { hit(); sheetOpen && sheetKind === 'search' ? closeSheet() : showSearch(); }
   else if (k === 'g') { hit(); setLayout(layout === 'stage' ? 'grid' : 'stage'); }
+  else if (k === 's') { hit(); const p = panes.get(focused); if (p) openFind(p); }
+  else if (k === 'o') { hit(); pinToggle(); }
   // Flip the whole cockpit at once — the "what is everyone doing" view.
   else if (k === 'a') { hit(); const on = ![...panes.values()].every(p => p.sem); panes.forEach(p => setMode(p, on)); }
   else if (e.key === 'ArrowRight') { hit(); cycle(1); }
@@ -1429,5 +1666,6 @@ async function maybeDemo() {
   await runDemo({
     flash, diag, setLayout, openTimeline, closeTimeline, openPalette,
     closePalette, showChanges, closeSheet, setMode, panes, focus, sendTo,
+    pinToggle, setPin, openFind, closeFind,
   });
 }

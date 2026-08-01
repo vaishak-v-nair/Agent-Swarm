@@ -141,6 +141,23 @@ pub fn load(cwd: &str) -> Loaded {
     Loaded { settings: Settings::default(), source: "defaults".into(), problem: String::new() }
 }
 
+/// Apply a change on top of whatever is already saved, and write it back.
+///
+/// The load-mutate-write shape is the point: the settings sheet in the app only
+/// edits the scalar fields, and a naive "serialize what the form knows" would
+/// silently delete the `profiles` a user wrote by hand. Whatever the closure
+/// does not touch survives.
+pub fn update<F: FnOnce(&mut Settings)>(cwd: &str, apply: F) -> Result<String, String> {
+    let mut current = load(cwd).settings;
+    apply(&mut current);
+    let path = project_file(cwd);
+    let dir = path.parent().ok_or("no parent directory")?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(&current).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
 /// Write the current values out so there is something to edit. Nobody tunes a
 /// file they have to invent from scratch.
 pub fn write_template(cwd: &str) -> Result<String, String> {
@@ -199,6 +216,29 @@ mod tests {
         let l = load(&dir.to_string_lossy());
         assert_eq!(l.settings.stuck_ms, d_stuck(), "must fall back, not zero out");
         assert!(l.problem.contains("line"), "and must say why: {}", l.problem);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn updating_a_threshold_does_not_delete_the_profiles() {
+        // The settings sheet edits scalars. A save that serialized only what the
+        // form knew about would wipe profiles the user wrote by hand — data loss
+        // dressed up as a save button.
+        let dir = std::env::temp_dir().join("agentswarm-settings-merge");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".agentswarm")).unwrap();
+        std::fs::write(
+            dir.join(".agentswarm").join("settings.json"),
+            r#"{"stuck_ms": 1234, "profiles": {"qm": {"command": "qm"}}}"#,
+        ).unwrap();
+        let cwd = dir.to_string_lossy().to_string();
+
+        update(&cwd, |s| s.stuck_ms = 9999).unwrap();
+
+        let back = load(&cwd).settings;
+        assert_eq!(back.stuck_ms, 9999, "the edit must land");
+        assert_eq!(back.profiles.len(), 1, "the profiles must survive the save");
+        assert_eq!(back.profiles["qm"].command, "qm");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

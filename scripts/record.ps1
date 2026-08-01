@@ -24,7 +24,7 @@ $root    = Split-Path -Parent $PSScriptRoot
 $exe     = Join-Path $root 'app\src-tauri\target\release\agentswarm.exe'
 $outDir  = Join-Path $root 'app\src-tauri\target\release\recording'
 $frames  = Join-Path $outDir 'frames'
-$seconds = 52
+$seconds = 64
 $fps     = 4
 
 if (-not (Test-Path $exe)) { Write-Host "not built - cd app; npx tauri build --no-bundle" -ForegroundColor Red; exit 1 }

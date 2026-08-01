@@ -25,7 +25,7 @@ const beat = (at, say, does) => ({ at, say, does });
 export async function runDemo(api) {
   const { flash, diag, setLayout, openTimeline, closeTimeline,
           openPalette, closePalette, showChanges, closeSheet,
-          setMode, panes, focus, sendTo } = api;
+          setMode, panes, focus, sendTo, setPin, openFind, closeFind } = api;
 
   const script = [
     beat(1500, 'the cockpit, with a swarm open', null),
@@ -54,6 +54,25 @@ export async function runDemo(api) {
     beat(3500, 'back to raw', () => {
       const p = panes.get([...panes.keys()][0]);
       if (p) setMode(p, false);
+    }),
+
+    beat(3000, 'pin — two panes share the stage for a comparison', () => {
+      // setPin, not a focus dance: each pane moves containers at most once.
+      // The focus-pin-focus version re-parented a WebGL canvas twice in one
+      // tick and crashed the WebView2 renderer to a white window.
+      const ids = [...panes.keys()];
+      if (ids.length > 1) setPin(ids[1]);
+    }),
+    beat(3500, 'and release', () => setPin(null)),
+
+    beat(2500, 'find in scrollback — the error that scrolled past', () => {
+      const p = panes.get([...panes.keys()][0]);
+      if (p) { openFind(p); const i = p.el.querySelector('.find input');
+               i.value = 'agent'; p.search.findNext('agent'); }
+    }),
+    beat(3000, null, () => {
+      const p = panes.get([...panes.keys()][0]);
+      if (p) closeFind(p);
     }),
 
     beat(2500, 'every pane tiled', () => setLayout('grid')),
@@ -85,4 +104,4 @@ export async function runDemo(api) {
 }
 
 /** Total run time, so a recorder knows how long to capture. */
-export const DEMO_SECONDS = 48;
+export const DEMO_SECONDS = 60;

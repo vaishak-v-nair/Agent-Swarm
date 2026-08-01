@@ -73,6 +73,9 @@ Everything else is reachable from there, but has a direct key too:
 | `ctrl+shift+M` | every session, in the order it happened |
 | `ctrl+shift+D` | what changed on disk — and **why** |
 | `ctrl+shift+F` | search everything ever said in these folders |
+| `ctrl+shift+S` | find in this pane's scrollback |
+| `ctrl+shift+O` | pin — two panes share the stage |
+| `ctrl+shift+C` / `V` | copy / paste (right-click: copy selection, else paste) |
 | `ctrl+shift+Z` / `W` | zoom / close |
 
 ---
@@ -172,6 +175,9 @@ cargo run --release --example ptybench  -- 9 12                    # throughput 
 - A file renamed since it was edited will not connect to its history.
 - Search matches words, not meaning.
 - Windows only so far.
+- No tabs. The rail is deliberately the answer to what tabs solve — many
+  sessions, little space — but if a week of use says otherwise, that is a
+  design decision to revisit with usage data rather than defend.
 
 ## Status
 
