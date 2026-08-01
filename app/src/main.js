@@ -197,6 +197,204 @@ async function newPane(profile = 'powershell', opts = {}) {
   }
 }
 
+/* ── M5: drive, review, remember ───────────────────────────────────────────
+   Three things the cockpit could not do. It could watch panes but not talk to
+   them; it could say what an agent *said* it did but not what changed on disk;
+   and it could show live sessions but not reach one that had already ended.   */
+
+/** A reusable full-window sheet. Diffs and search are different content in the
+ *  same frame, and a second bespoke overlay would be a third set of open/close
+ *  bugs to write. */
+let sheetOpen = false, sheetKind = null;
+
+function openSheet(kind, title, sub = '') {
+  sheetKind = kind;
+  sheetOpen = true;
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('sh-title').textContent = title;
+  document.getElementById('sh-sub').textContent = sub;
+  document.getElementById('sh-body').textContent = '';
+}
+function closeSheet() {
+  sheetOpen = false;
+  sheetKind = null;
+  document.getElementById('sheet').classList.remove('open');
+  if (!paletteOpen && !timelineOpen) panes.get(focused)?.term.focus();
+}
+
+/** The distinct folders the open panes are working in. */
+const paneCwds = () => [...new Set([...panes.values()].map(p => p.cwd).filter(Boolean))];
+
+/* ── drive ─────────────────────────────────────────────────────────────────
+   Typing into a pane you are not looking at, and into every pane at once. The
+   carriage return is the whole point: this submits. */
+function sendTo(id, text) {
+  const p = panes.get(id);
+  if (!p) return;
+  p.bellAt = 0;
+  p.el.classList.remove('unseen');
+  invoke('pty_write', { id, data: text + '\r' })
+    .catch(e => { flash(`could not send to #${id}`); diag(`send to ${id} failed: ${e}`); });
+}
+
+function broadcast(text) {
+  const targets = [...panes.values()].filter(p => p.alive && p.profile === 'claude');
+  if (!targets.length) { flash('no claude panes to broadcast to'); return; }
+  targets.forEach(p => sendTo(p.id, text));
+  flash(`sent to ${targets.length} pane${targets.length > 1 ? 's' : ''}`);
+  diag(`broadcast to ${targets.length} pane(s): ${text.slice(0, 80)}`);
+}
+
+/* ── review ────────────────────────────────────────────────────────────────
+   What actually changed, and which session did it. The second half is the part
+   no git client can tell you: attribution comes from the transcript feed, where
+   a tool card names the file it wrote.                                        */
+const EDITORS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Update']);
+
+function whoTouched(path) {
+  const tail = path.replace(/\\/g, '/').toLowerCase();
+  const names = new Set();
+  for (const c of feed) {
+    if (c.kind !== 'tool' || !EDITORS.has(c.title)) continue;
+    const said = (c.body || '').replace(/\\/g, '/').toLowerCase();
+    if (said.endsWith(tail) || said.includes(tail)) names.add(`#${c.pane} ${c.label}`);
+  }
+  return [...names];
+}
+
+async function showChanges() {
+  const cwds = paneCwds();
+  openSheet('diff', 'changes', cwds.length > 1 ? `${cwds.length} folders` : cwds[0] || '');
+  const body = document.getElementById('sh-body');
+
+  if (!cwds.length) { body.innerHTML = '<div class="sh-empty">no panes open</div>'; return; }
+  body.innerHTML = '<div class="sh-empty">reading git…</div>';
+
+  const results = await Promise.all(cwds.map(async cwd => {
+    try { return { cwd, ...(await invoke('git_changes', { cwd })) }; }
+    catch (e) { return { cwd, files: [], problem: String(e) }; }
+  }));
+
+  body.textContent = '';
+  let total = 0;
+  for (const r of results) {
+    const head = document.createElement('div');
+    head.className = 'sh-group';
+    head.textContent = r.problem ? `${r.cwd} — ${r.problem}`
+                                 : `${r.root || r.cwd}${r.branch ? '  ·  ' + r.branch : ''}`;
+    body.appendChild(head);
+
+    if (!r.files?.length) {
+      const e = document.createElement('div');
+      e.className = 'sh-empty';
+      e.textContent = r.problem ? '' : 'working tree clean';
+      body.appendChild(e);
+      continue;
+    }
+    total += r.files.length;
+
+    for (const f of r.files) {
+      const row = document.createElement('div');
+      row.className = 'diff-row';
+      row.innerHTML = '<span class="d-status"></span><span class="d-path"></span>' +
+                      '<span class="d-who"></span><span class="d-count"></span>';
+      row.querySelector('.d-status').textContent = f.untracked ? 'new' : f.status.trim();
+      row.querySelector('.d-path').textContent = f.path;
+      const who = whoTouched(f.path);
+      const w = row.querySelector('.d-who');
+      w.textContent = who.join(', ');
+      if (who.length) w.classList.add('attributed');
+      row.querySelector('.d-count').textContent =
+        f.untracked ? '' : `+${f.added} −${f.removed}`;
+      row.addEventListener('click', () => showDiff(r.cwd, f));
+      body.appendChild(row);
+    }
+  }
+  document.getElementById('sh-sub').textContent =
+    total ? `${total} changed file${total > 1 ? 's' : ''}` : 'nothing changed';
+}
+
+async function showDiff(cwd, f) {
+  openSheet('diff', f.path, cwd);
+  const body = document.getElementById('sh-body');
+  body.innerHTML = '<div class="sh-empty">reading diff…</div>';
+
+  const back = document.createElement('div');
+  back.className = 'sh-back';
+  back.textContent = '← all changes';
+  back.addEventListener('click', showChanges);
+
+  let text = '';
+  try { text = await invoke('git_file_diff', { cwd, path: f.path, untracked: !!f.untracked }); }
+  catch (e) { text = `could not read the diff: ${e}`; }
+
+  body.textContent = '';
+  body.appendChild(back);
+  const pre = document.createElement('div');
+  pre.className = 'diff-text';
+  for (const line of text.split('\n')) {
+    const d = document.createElement('div');
+    d.className = 'dl ' + (line.startsWith('+++') || line.startsWith('---') ? 'meta'
+                        : line.startsWith('@@') ? 'hunk'
+                        : line.startsWith('+') ? 'add'
+                        : line.startsWith('-') ? 'del' : '');
+    d.textContent = line || ' ';
+    pre.appendChild(d);
+  }
+  body.appendChild(pre);
+}
+
+/* ── remember ──────────────────────────────────────────────────────────────
+   Panes are live; transcripts outlast them. This is the only way to answer
+   "what did I decide about this", and every hit is quoted with the file and
+   line it came from — an answer you can check rather than one you must trust. */
+async function showSearch(initial = '') {
+  openSheet('search', 'search everything', paneCwds().join('  ·  '));
+  const body = document.getElementById('sh-body');
+
+  const bar = document.createElement('input');
+  bar.className = 'sh-input';
+  bar.placeholder = 'what did I decide about…';
+  bar.value = initial;
+  const out = document.createElement('div');
+  body.append(bar, out);
+
+  let timer;
+  const run = async () => {
+    const q = bar.value.trim();
+    if (q.length < 2) { out.innerHTML = '<div class="sh-empty">type at least two characters</div>'; return; }
+    out.innerHTML = '<div class="sh-empty">searching…</div>';
+    let hits = [];
+    try { hits = await invoke('search_history', { cwds: paneCwds(), query: q, limit: 60 }); }
+    catch (e) { out.innerHTML = ''; out.textContent = `search failed: ${e}`; return; }
+
+    out.textContent = '';
+    if (!hits.length) { out.innerHTML = '<div class="sh-empty">nothing said about that</div>'; return; }
+    document.getElementById('sh-sub').textContent = `${hits.length} result${hits.length > 1 ? 's' : ''}`;
+
+    for (const h of hits) {
+      const r = document.createElement('div');
+      r.className = `hit ${h.kind}`;
+      r.innerHTML = '<div class="hit-body"></div><div class="hit-cite"></div>';
+      r.querySelector('.hit-body').textContent = h.body;
+      // the receipt: which transcript, which line. Without this it is just a guess.
+      const when = h.iso ? new Date(h.iso) : null;
+      r.querySelector('.hit-cite').textContent =
+        `${ICON[h.kind] ?? '·'} ${h.title}  ·  ${h.session}:${h.line}` +
+        (when && !isNaN(when) ? `  ·  ${when.toLocaleString()}` : '');
+      out.appendChild(r);
+    }
+  };
+
+  bar.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 220); });
+  bar.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); closeSheet(); }
+    e.stopPropagation();
+  });
+  bar.focus();
+  if (initial) run();
+}
+
 /* ── M4: everything, in order ──────────────────────────────────────────────
    The original complaint about the CLI, in the user's words: "it places
    everything in order which claude CLI lacks."
@@ -353,6 +551,17 @@ function actions() {
     list.push({ text: `new pane  ${name}`, hint: name === defaultProfile ? 'ctrl+shift+T' : '', run: () => newPane(name) });
   }
   list.push({ text: 'save this swarm as a recipe', hint: `${panes.size} panes open`, ask: 'name for this swarm', run: saveSwarmAs });
+  list.push({ text: 'changes  what actually changed on disk', hint: 'ctrl+shift+D', run: showChanges });
+  list.push({ text: 'search  everything ever said here', hint: 'ctrl+shift+F', run: () => showSearch() });
+  const claudePanes = [...panes.values()].filter(p => p.alive && p.profile === 'claude');
+  if (claudePanes.length) {
+    list.push({ text: `broadcast  to every claude pane`, hint: `${claudePanes.length} pane${claudePanes.length > 1 ? 's' : ''}`,
+                ask: 'what to send to every claude pane', run: broadcast });
+  }
+  for (const t of claudePanes) {
+    list.push({ text: `send  to #${t.id} ${t.label || t.profile}`, hint: t.cwd || '',
+                ask: `what to send to #${t.id}`, run: text => sendTo(t.id, text) });
+  }
   list.push({ text: 'timeline  all sessions in order', hint: 'ctrl+shift+M', run: () => openTimeline() });
   if (focused) list.push({ text: `timeline  pane #${focused} only`, run: () => openTimeline(focused) });
   list.push({ text: 'jump to what needs me', hint: 'ctrl+shift+space', run: jumpToNeedy });
@@ -732,6 +941,10 @@ setInterval(() => {
     if (e.target.id === 'palette') closePalette();   // clicking outside dismisses
   });
   document.querySelector('.tl-close').addEventListener('click', closeTimeline);
+  document.querySelector('.sh-close').addEventListener('click', closeSheet);
+  document.getElementById('sheet').addEventListener('mousedown', e => {
+    if (e.target.id === 'sheet') closeSheet();
+  });
   document.getElementById('timeline').addEventListener('mousedown', e => {
     if (e.target.id === 'timeline') closeTimeline();
   });
@@ -741,6 +954,7 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (paletteOpen) { e.preventDefault(); closePalette(); return; }
     if (timelineOpen) { e.preventDefault(); closeTimeline(); return; }
+    if (sheetOpen) { e.preventDefault(); closeSheet(); return; }
   }
   if (!(e.ctrlKey && e.shiftKey)) return;
   const k = e.key.toLowerCase();
@@ -752,6 +966,8 @@ addEventListener('keydown', e => {
   else if (e.key === ' ') { hit(); jumpToNeedy(); }
   else if (k === 'p') { hit(); paletteOpen ? closePalette() : openPalette(); }
   else if (k === 'm') { hit(); timelineOpen ? closeTimeline() : openTimeline(); }
+  else if (k === 'd') { hit(); sheetOpen && sheetKind === 'diff' ? closeSheet() : showChanges(); }
+  else if (k === 'f') { hit(); sheetOpen && sheetKind === 'search' ? closeSheet() : showSearch(); }
   // Flip the whole cockpit at once — the "what is everyone doing" view.
   else if (k === 'a') { hit(); const on = ![...panes.values()].every(p => p.sem); panes.forEach(p => setMode(p, on)); }
   else if (e.key === 'ArrowRight') { hit(); cycle(1); }

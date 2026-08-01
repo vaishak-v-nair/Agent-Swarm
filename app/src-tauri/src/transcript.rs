@@ -238,6 +238,97 @@ pub fn parse_line(pane: u32, line: &str) -> Vec<Card> {
     out
 }
 
+/// M5 — one result from searching everything that has been said in a folder.
+///
+/// The citation is the point. "You decided this" is worth nothing without
+/// *where*, so every hit carries the transcript file and the line number inside
+/// it — enough to open the exact record and check.
+#[derive(Clone, Serialize)]
+pub struct Hit {
+    pub session: String,
+    pub line: u32,
+    pub iso: String,
+    pub kind: String,
+    pub title: String,
+    pub body: String,
+    /// Which of the searched folders this came from, so results from several
+    /// panes stay tellable apart.
+    pub cwd: String,
+}
+
+/// Search every transcript under each folder for a phrase.
+///
+/// This is the thing the cockpit could not do: answer "what did I decide about
+/// this" across sessions that have already ended. Panes are live; transcripts
+/// are the memory, and they outlast every pane that wrote them.
+///
+/// Matching is plain case-insensitive substring. Not fuzzy: when the answer is
+/// going to be quoted back with a citation, a hit needs to be a hit.
+pub fn search(cwds: &[String], query: &str, limit: usize) -> Vec<Hit> {
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() {
+        return Vec::new();
+    }
+
+    let mut hits: Vec<Hit> = Vec::new();
+    let mut seen_dirs: Vec<PathBuf> = Vec::new();
+
+    for cwd in cwds {
+        let Some(dir) = project_dir(cwd) else { continue };
+        if seen_dirs.contains(&dir) {
+            continue; // several panes in one folder share a transcript directory
+        }
+        seen_dirs.push(dir.clone());
+
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path()).collect())
+            .unwrap_or_default();
+        files.retain(|p| p.extension().map(|e| e == "jsonl").unwrap_or(false));
+        // newest first: recent decisions are the ones being asked about
+        files.sort_by_key(|p| {
+            std::cmp::Reverse(
+                std::fs::metadata(p)
+                    .and_then(|m| m.modified())
+                    .unwrap_or(SystemTime::UNIX_EPOCH),
+            )
+        });
+
+        for path in files {
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            for (i, line) in text.lines().enumerate() {
+                // cheap reject before the parse — most lines match nothing
+                if !line.to_lowercase().contains(&needle) {
+                    continue;
+                }
+                for c in parse_line(0, line) {
+                    let hay = format!("{} {}", c.title, c.body).to_lowercase();
+                    if !hay.contains(&needle) {
+                        continue; // the phrase was in metadata, not in what was said
+                    }
+                    hits.push(Hit {
+                        session: name.clone(),
+                        line: i as u32 + 1,
+                        iso: c.iso,
+                        kind: c.kind,
+                        title: c.title,
+                        body: c.body,
+                        cwd: cwd.clone(),
+                    });
+                    if hits.len() >= limit {
+                        return hits;
+                    }
+                }
+            }
+        }
+    }
+    hits
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -306,6 +306,83 @@ html, body {
 #tl-body::-webkit-scrollbar, #pal-list::-webkit-scrollbar { width: 9px; }
 #tl-body::-webkit-scrollbar-thumb, #pal-list::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }
 
+/* ── M5: the sheet — changes and search ───────────────────────────────────
+   Same frame as the timeline, different content. Both answer questions the
+   grid of terminals structurally cannot.                                     */
+#sheet { position: fixed; inset: 0; display: none; background: rgba(6,7,9,.55); z-index: 11; }
+#sheet.open { display: block; }
+.sh-box {
+  width: min(1100px, 94vw);
+  height: 82vh;
+  margin: 6vh auto 0;
+  display: flex;
+  flex-direction: column;
+  background: #12141a;
+  border: 1px solid #2e3340;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  overflow: hidden;
+}
+.sh-head {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 9px 14px; border-bottom: 1px solid var(--line);
+  font-size: 11px; color: var(--dim); flex: 0 0 auto;
+}
+.sh-title { color: var(--accent); font-weight: 600; letter-spacing: .3px; }
+.sh-close { cursor: pointer; padding: 0 4px; }
+.sh-close:hover { color: var(--accent); }
+#sh-body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0 14px; }
+.sh-empty { padding: 22px; text-align: center; color: var(--dim); font-size: 12px; }
+.sh-group {
+  position: sticky; top: 0; background: #12141a;
+  padding: 8px 14px 5px; font-size: 10px; color: #5b606b;
+  letter-spacing: .4px; border-bottom: 1px solid var(--line);
+}
+.sh-back { padding: 7px 14px; font-size: 11px; color: var(--dim); cursor: pointer; }
+.sh-back:hover { color: var(--accent); }
+.sh-input {
+  width: calc(100% - 28px); margin: 10px 14px 6px; padding: 9px 11px;
+  background: #0f1116; border: 1px solid var(--line); border-radius: 6px;
+  color: var(--fg); font: inherit; font-size: 13px; outline: none;
+}
+.sh-input:focus { border-color: var(--accent); }
+
+/* changed files */
+.diff-row {
+  display: grid; grid-template-columns: 42px 1fr auto auto; gap: 12px;
+  align-items: baseline; padding: 5px 14px; font-size: 12px; cursor: pointer;
+}
+.diff-row:hover { background: #171a21; }
+.d-status { color: #dfa03a; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; }
+.d-path { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11.5px;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Which session wrote this file — the part no git client can tell you, because
+   it comes from the transcript, not from the repo. */
+.d-who { font-size: 10px; color: #5b606b; }
+.d-who.attributed { color: #7db4e6; }
+.d-count { font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+.diff-text { padding: 4px 0 10px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 11.5px; }
+.dl { padding: 0 14px; white-space: pre-wrap; word-break: break-word; color: #9aa1ad; }
+.dl.add  { background: rgba(92,186,138,.10); color: #8fd8b0; }
+.dl.del  { background: rgba(224,112,143,.10); color: #ef9db1; }
+.dl.hunk { color: #b98ad6; }
+.dl.meta { color: #5b606b; }
+
+/* search hits — the citation is not decoration, it is the product */
+.hit { padding: 8px 14px 9px; border-left: 2px solid var(--line); margin: 0 0 2px 12px; }
+.hit-body { font-size: 12px; line-height: 1.5; color: var(--fg); }
+.hit-cite { margin-top: 3px; font-size: 10px; color: #5b606b; font-family: "Cascadia Mono", Consolas, monospace; }
+.hit.you    { border-left-color: var(--accent); }
+.hit.claude { border-left-color: #5b9cd6; }
+.hit.tool   { border-left-color: #dfa03a; }
+.hit.tool .hit-body { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; color: #b6bcc7; }
+.hit.result { border-left-color: var(--line); }
+.hit.result .hit-body { color: var(--dim); font-size: 11px; }
+
+#sh-body::-webkit-scrollbar { width: 9px; }
+#sh-body::-webkit-scrollbar-thumb { background: #2b2f38; border-radius: 5px; }
+
 #flash { font-size: 11px; color: var(--accent); }
 
 #empty {

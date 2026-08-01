@@ -1,3 +1,4 @@
+pub mod git;
 pub mod pty;
 pub mod recipes;
 pub mod transcript;
@@ -102,6 +103,29 @@ fn startup_swarm() -> Option<String> {
 #[tauri::command]
 fn save_recipe(cwd: String, recipe: recipes::Recipe) -> Result<String, String> {
     recipes::save(&cwd, recipe).map(|p| p.to_string_lossy().to_string())
+}
+
+/// M5. What is different in the working tree for a pane's folder.
+#[tauri::command]
+fn git_changes(cwd: String) -> git::Changes {
+    git::changes(&cwd)
+}
+
+/// M5. The unified diff for one file.
+#[tauri::command]
+fn git_file_diff(cwd: String, path: String, untracked: bool) -> String {
+    git::file_diff(&cwd, &path, untracked)
+}
+
+/// M5. Search everything that has been said in these folders.
+///
+/// The cockpit shows live panes. This reaches sessions that have already ended,
+/// which is the only way to answer "what did I decide about this yesterday" —
+/// and every hit carries the transcript file and line, so the answer can be
+/// checked rather than believed.
+#[tauri::command]
+fn search_history(cwds: Vec<String>, query: String, limit: Option<usize>) -> Vec<transcript::Hit> {
+    transcript::search(&cwds, &query, limit.unwrap_or(60))
 }
 
 /// M2. Attach the semantic layer to a pane: watch the Claude Code transcript for
@@ -220,6 +244,9 @@ pub fn run() {
             default_cwd,
             list_recipes,
             save_recipe,
+            git_changes,
+            git_file_diff,
+            search_history,
             startup_swarm,
             set_attention,
             diag
