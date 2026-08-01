@@ -57,7 +57,9 @@ fn main() {
     let (b, n2) = ms(|| transcript::touched_by(&cwds, "app/src/order.js", 40).len());
     println!("\n  why — {a} µs then {b} µs  ({n1} and {n2} edits)");
 
-    // A changed file must invalidate. Nothing else here proves the cache is safe.
-    println!("\n  a cached file that changes is re-read, not served stale");
-    println!("  (asserted by the unit test; the watcher is unaffected — it seeks)");
+    // Invalidation is not measured here. It is asserted by
+    // transcript::tests::a_changed_file_is_re_read_rather_than_served_stale —
+    // which exists because this line once claimed a test that did not.
+    println!("\n  invalidation: a_changed_file_is_re_read_rather_than_served_stale");
+    println!("  the live watcher is unaffected — it seeks by byte offset");
 }

@@ -638,6 +638,37 @@ mod tests {
     }
 
     #[test]
+    fn a_changed_file_is_re_read_rather_than_served_stale() {
+        // The benchmark claimed this was "asserted by the unit test" before any
+        // such test existed. Caching a file whose lowered copy goes stale would
+        // make search silently answer from a version of history that is no
+        // longer on disk — the exact class of quiet wrongness this app is about.
+        let dir = std::env::temp_dir().join("agentswarm-cache-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("s.jsonl");
+
+        std::fs::write(&f, "First\n").unwrap();
+        let a = lines_of(&f).unwrap();
+        assert_eq!(a[0].0, "First");
+        assert_eq!(a[0].1, "first", "the lowered copy is what search matches on");
+
+        // unchanged: the very same allocation comes back, so nothing was re-read
+        let b = lines_of(&f).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&a, &b), "an unchanged file must not be re-read");
+
+        // changed: different length, so (mtime, len) cannot match however coarse
+        // the clock is
+        std::fs::write(&f, "SECOND LINE\n").unwrap();
+        let c = lines_of(&f).unwrap();
+        assert!(!std::sync::Arc::ptr_eq(&a, &c), "a changed file must be re-read");
+        assert_eq!(c[0].0, "SECOND LINE");
+        assert_eq!(c[0].1, "second line", "the lowered copy must be rebuilt too");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn claudes_own_path_comes_out_of_the_general_mechanism() {
         // M12. The abstraction is only real if the built-in case goes through it.
         // If `project_dir` still computed its own path, a second agent would be
