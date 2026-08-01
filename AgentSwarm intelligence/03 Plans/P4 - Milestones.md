@@ -71,6 +71,12 @@ Construction sequence — every milestone ships the same product, more finished.
 - [x] Chrome proportional, data mono (reverses M9, on purpose)
 - [x] Motion rule refined: transitions explain change; nothing loops. Build log: [[B10 - M10 Stage]]
 
+## M11 — Any agent ✅ BUILT 2026-08-01
+- [x] Profiles definable in settings.json — any command, any args
+- [x] A defined profile shadows a built-in; the command itself is quoted
+- [x] `available_profiles` only offers what this machine can actually run
+- [x] Prompted by YC's QM ([[R1 - QM and What It Means For Us]]). Build log: [[B11 - M11 Any Agent]]
+
 ## What is built, and what is still unproven
 
 Every milestone has shipped. **Four of the five exit tests have not been run**,
@@ -86,6 +92,7 @@ because all of them require using it for real rather than building more:
 - M8 — installer built; first run proven on a folder that had never seen the app
 - M9 — design and language pass; came from the one source that produces this feedback: somebody looking at it
 - M10 — the grid premise was wrong: you read one session and monitor the rest
+- M11 — a cockpit hard-wired to one vendor was the weaker design all along
 
 The baseline week started **2026-08-01**. It is the only thing that will settle
 the four open exit tests, and no further building can substitute for it.
