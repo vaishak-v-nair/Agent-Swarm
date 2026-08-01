@@ -159,7 +159,17 @@ async function newPane(profile = 'powershell', opts = {}) {
 
   // Wait for the pane to actually have a size before spawning, so the shell's
   // first output lands in a correctly-sized terminal instead of a 1-column one.
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  //
+  // But never wait on rAF alone: a hidden or minimised window does not paint, so
+  // the callback never runs and the await never returns — the pane is built,
+  // looks alive, and no process is ever started. Launching a swarm and
+  // alt-tabbing immediately was enough to trigger it. Timers still fire when
+  // frames do not, so the timeout is the escape hatch; the ResizeObserver
+  // corrects the size the moment the window is actually shown.
+  await Promise.race([
+    new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))),
+    new Promise(r => setTimeout(r, 250)),
+  ]);
   refit(p);
 
   try {
@@ -580,7 +590,17 @@ function addCard(c) {
   body.className = 'card-body';
   body.textContent = c.body;          // textContent, not innerHTML: transcript text is untrusted
   d.append(head, body);
-  p.cards.appendChild(d);
+
+  // In time order, not arrival order — the same rule the merged timeline follows.
+  // These two views showed the same three cards in different orders until this
+  // was fixed, and the case is not hypothetical: when the watcher switches from
+  // borrowed context to this pane's own session it replays that session from the
+  // start, so late-arriving cards are routinely older than what is already here.
+  d.dataset.at = c.at;
+  const kids = p.cards.children;
+  let i = kids.length;
+  while (i > 0 && Number(kids[i - 1].dataset.at) > c.at) i--;
+  p.cards.insertBefore(d, kids[i] || null);
 
   // Bounded on purpose. An all-day session must not grow the DOM without limit.
   while (p.cards.childElementCount > 500) p.cards.firstElementChild.remove();

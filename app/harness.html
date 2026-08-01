@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AgentSwarm — harness</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <!--
+    A stand-in for Tauri so the real UI can be driven in a browser.
+
+    This exists because four milestones shipped without anyone ever typing into
+    the app. Every check was stdout diagnostics and unit tests, which verify that
+    the parts work and say nothing about whether the thing responds to a key. The
+    first key a human pressed found a bug.
+
+    Nothing here is a mock of the UI — index.html's markup and src/main.js run
+    unmodified. Only the IPC boundary is faked, and every call across it is
+    recorded in window.__calls so a test can assert on exactly what the app tried
+    to send to the PTY.
+  -->
+  <script>
+    window.__calls = [];        // every invoke, in order
+    window.__listeners = {};    // event name -> callback id
+
+    let nextCb = 0;
+    window.__TAURI_INTERNALS__ = {
+      transformCallback(cb) {
+        const id = ++nextCb;
+        window[`_${id}`] = cb;
+        return id;
+      },
+      invoke(cmd, payload) {
+        window.__calls.push({ cmd, payload });
+        switch (cmd) {
+          case 'plugin:event|listen':
+            window.__listeners[payload.event] = payload.handler;
+            return Promise.resolve(nextCb);
+          case 'plugin:event|unlisten':
+            return Promise.resolve();
+          case 'available_profiles':
+            return Promise.resolve(['powershell', 'cmd', 'pwsh', 'claude']);
+          case 'default_cwd':
+            return Promise.resolve('E:\\agent-swarm');
+          case 'startup_swarm':
+            return Promise.resolve(new URLSearchParams(location.search).get('swarm'));
+          case 'list_recipes':
+            return Promise.resolve({
+              recipes: [
+                { name: 'morning', description: 'the daily two', panes: [
+                  { profile: 'claude', cwd: 'E:\\agent-swarm', label: 'swarm', args: [] },
+                  { profile: 'powershell', cwd: 'E:\\agent-swarm', label: 'shell', args: [] }] },
+                { name: 'review', description: 'a reviewer that cannot edit', panes: [
+                  { profile: 'claude', cwd: 'E:\\agent-swarm', label: 'reviewer',
+                    args: ['--permission-mode', 'plan'] }] },
+              ],
+              problems: [],
+            });
+          default:
+            return Promise.resolve(null);
+        }
+      },
+    };
+
+    /** Push an event at the UI exactly as the Rust side would. */
+    window.__emit = (event, payload) => {
+      const id = window.__listeners[event];
+      if (!id) return false;
+      window[`_${id}`]({ event, id, payload });
+      return true;
+    };
+
+    /** Everything the app tried to write to a PTY, as one string per pane. */
+    window.__written = paneId => window.__calls
+      .filter(c => c.cmd === 'pty_write' && (paneId == null || c.payload.id === paneId))
+      .map(c => c.payload.data)
+      .join('');
+
+    /** Escape sequences are invisible in a diff; show them. */
+    window.__visible = s => s
+      .replace(/\x1b/g, '<ESC>').replace(/\r/g, '<CR>').replace(/\n/g, '<LF>')
+      .replace(/\x7f/g, '<DEL>').replace(/\x03/g, '<C-c>');
+  </script>
+  <header id="bar">
+    <span class="brand">AgentSwarm</span>
+    <span id="profiles"></span>
+    <span id="tally"></span>
+    <span id="flash"></span>
+    <span class="spacer"></span>
+    <span id="hint"><b>ctrl+shift+P</b> everything &nbsp;·&nbsp; M timeline &nbsp;·&nbsp; space → what needs me</span>
+  </header>
+  <main id="grid"></main>
+
+  <div id="palette">
+    <div class="pal-box">
+      <input id="pal-input" autocomplete="off" spellcheck="false">
+      <div id="pal-list"></div>
+    </div>
+  </div>
+
+  <div id="timeline">
+    <div class="tl-box">
+      <div class="tl-head">
+        <span class="tl-title">timeline</span>
+        <span id="tl-scope"></span>
+        <span class="spacer"></span>
+        <span class="tl-close" title="close (esc)">✕</span>
+      </div>
+      <div id="tl-body"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

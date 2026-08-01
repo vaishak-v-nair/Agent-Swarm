@@ -39,6 +39,46 @@ fn ps_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }
 
+/// Strip the environment that marks *this* process as living inside a Claude
+/// Code session, and report what was removed.
+///
+/// This is not a nicety. AgentSwarm is usually launched from a terminal — often
+/// one already running Claude Code — and a child process inherits the whole
+/// environment, including `CLAUDE_CODE_CHILD_SESSION`. A `claude` that sees that
+/// marker believes it is a nested sub-session and turns itself down accordingly:
+///
+///     ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker
+///
+/// With transcript saving off there is no transcript, so the semantic layer has
+/// nothing to follow and prompt history has nowhere to live. Two headline
+/// features and the up-arrow all fail at once, for a reason that is invisible
+/// unless you read the pane's own banner.
+///
+/// A pane is a top-level session. It must start from a clean slate.
+///
+/// `ANTHROPIC_BASE_URL` is removed only when a nested marker was present: in
+/// that case it points at the *parent* session's proxy and routing a new session
+/// through it is wrong. Left alone otherwise, because a user who set it meant it.
+pub fn scrub_session_env(cmd: &mut CommandBuilder) -> Vec<String> {
+    let nested = std::env::var_os("CLAUDE_CODE_CHILD_SESSION").is_some()
+        || std::env::var_os("CLAUDECODE").is_some();
+
+    let mut removed = Vec::new();
+    for (key, _) in std::env::vars_os() {
+        let Some(k) = key.to_str() else { continue };
+        let strip = k.starts_with("CLAUDE_CODE_")
+            || k.starts_with("CLAUDE_PREVIEW_")
+            || matches!(k, "CLAUDECODE" | "CLAUDE_PID" | "CLAUDE_EFFORT" | "CLAUDE_AGENT_SDK_VERSION")
+            || (nested && k == "ANTHROPIC_BASE_URL");
+        if strip {
+            cmd.env_remove(k);
+            removed.push(k.to_string());
+        }
+    }
+    removed.sort();
+    removed
+}
+
 /// What a pane runs. Resolved here rather than in the UI so the frontend never
 /// builds a command line — it names a profile, the backend decides the argv.
 ///
@@ -87,7 +127,58 @@ pub fn resolve(profile: &str, args: &[String]) -> CommandBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::ps_quote;
+    use super::{ps_quote, scrub_session_env};
+    use portable_pty::CommandBuilder;
+
+    /// This test mutates process environment, so it must not run beside another
+    /// that reads it. Nothing else here touches env.
+    #[test]
+    fn a_pane_does_not_inherit_the_session_that_launched_the_app() {
+        // The bug: AgentSwarm launched from a terminal running Claude Code passed
+        // CLAUDE_CODE_CHILD_SESSION to every pane. Each pane then believed it was
+        // a nested sub-session and disabled transcript saving — which silently
+        // killed the semantic layer, the state machine's tool signal, and prompt
+        // history all at once. E:\agent-swarm accumulated zero history entries.
+        std::env::set_var("CLAUDE_CODE_CHILD_SESSION", "1");
+        std::env::set_var("CLAUDE_CODE_SESSION_ID", "abc");
+        std::env::set_var("CLAUDECODE", "1");
+        std::env::set_var("CLAUDE_PID", "999");
+        std::env::set_var("ANTHROPIC_BASE_URL", "http://127.0.0.1:1/parent-proxy");
+
+        let mut cmd = CommandBuilder::new("cmd.exe");
+        let removed = scrub_session_env(&mut cmd);
+
+        for k in ["CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDECODE", "CLAUDE_PID"] {
+            assert!(removed.iter().any(|r| r == k), "{k} should have been cleared");
+        }
+        // the parent's proxy goes too, but only because a nested marker was present
+        assert!(removed.iter().any(|r| r == "ANTHROPIC_BASE_URL"));
+
+        // and nothing a shell actually needs is touched
+        for k in ["PATH", "USERPROFILE", "SystemRoot"] {
+            assert!(!removed.iter().any(|r| r.eq_ignore_ascii_case(k)), "{k} must survive");
+        }
+
+        for k in ["CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDECODE",
+                  "CLAUDE_PID", "ANTHROPIC_BASE_URL"] {
+            std::env::remove_var(k);
+        }
+    }
+
+    #[test]
+    fn a_users_own_base_url_survives_outside_a_nested_session() {
+        // no child markers set: ANTHROPIC_BASE_URL is the user's own choice
+        std::env::remove_var("CLAUDE_CODE_CHILD_SESSION");
+        std::env::remove_var("CLAUDECODE");
+        std::env::set_var("ANTHROPIC_BASE_URL", "https://my-gateway.example");
+
+        let mut cmd = CommandBuilder::new("cmd.exe");
+        let removed = scrub_session_env(&mut cmd);
+        assert!(!removed.iter().any(|r| r == "ANTHROPIC_BASE_URL"),
+                "a base URL the user set themselves must not be stripped");
+
+        std::env::remove_var("ANTHROPIC_BASE_URL");
+    }
 
     #[test]
     fn quoting_neutralises_powershell() {
@@ -124,6 +215,13 @@ pub fn spawn<S: Sink>(
         if std::path::Path::new(&dir).is_dir() {
             cmd.cwd(dir);
         }
+    }
+    let scrubbed = scrub_session_env(&mut cmd);
+    if !scrubbed.is_empty() {
+        // Say it out loud. A pane that quietly behaves differently depending on
+        // what launched the app is the worst kind of bug to be handed.
+        println!("[rust] pane {id}: cleared {} inherited session var(s): {}",
+                 scrubbed.len(), scrubbed.join(" "));
     }
 
     let mut child = pair.slave.spawn_command(cmd)?;
