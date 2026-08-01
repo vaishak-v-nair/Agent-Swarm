@@ -18,11 +18,11 @@ file said **recipe**, for the same object.
 | **swarm** | a named set of panes you open together, with the folder and policy for each. *Was also called "recipe". No longer.* |
 | **profile** | what a pane runs: `claude`, `powershell`, `pwsh`, `cmd`, `wsl`. |
 | **the muster rail** | the row of lamps in the top bar — one per pane, in pane order. |
-| **stage** | the layout where one pane is at reading size and the rest are cards. The default. |
-| **the rail** | the column of cards beside the stage. |
-| **card** *(layout)* | a pane with its terminal folded away — state, elapsed, last line. Same pane, same process. |
+| **stage** | the layout where one pane is at reading size and the rest are folded. The default. |
+| **the rail** | the column beside the stage, holding every pane you are not reading. |
+| **folded** | a pane in the rail — terminal put away, showing state, elapsed and its last line. Same pane, same process, nothing rebuilt. |
 | **grid** | the older layout: every pane tiled evenly. `ctrl+shift+G`. |
-| **card** | one thing that happened, read from the transcript. |
+| **card** | one thing that happened, read from the transcript. *Only this.* |
 | **the timeline** | every session's cards, interleaved by real time. |
 
 ## The two readings
