@@ -57,6 +57,13 @@ Construction sequence — every milestone ships the same product, more finished.
 - [x] A README a teammate can follow. Build log: [[B8 - M8 Someone Else Can Run It]]
 - [x] **Unblocks M2's exit test** — "does one teammate say whoa" is now a question that can be asked
 
+## M9 — An instrument, not an assistant ✅ BUILT 2026-08-01
+- [x] Brand colour is identity only; status follows annunciator convention
+- [x] Nothing animates; "needs you" became "waiting"; red became amber
+- [x] Vocabulary settled — one word per concept ([[I1 - What Things Are Called]])
+- [x] The muster rail: every pane as one lamp, in pane order
+- [x] Verified through the harness. Build log: [[B9 - M9 An Instrument Not An Assistant]]
+
 ## What is built, and what is still unproven
 
 Every milestone has shipped. **Four of the five exit tests have not been run**,
@@ -70,6 +77,7 @@ because all of them require using it for real rather than building more:
 - M6 — same; the "why" answer is reproducible via examples/whycheck.rs
 - M7 — layout survival proven by killing the app and relaunching it
 - M8 — installer built; first run proven on a folder that had never seen the app
+- M9 — design and language pass; came from the one source that produces this feedback: somebody looking at it
 
 The baseline week started **2026-08-01**. It is the only thing that will settle
 the four open exit tests, and no further building can substitute for it.
