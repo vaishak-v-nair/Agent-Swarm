@@ -1,0 +1,57 @@
+{
+  "rows": 416174,
+  "by_split": {
+    "train": 373069,
+    "dev": 37740,
+    "test": 5365
+  },
+  "by_source": {
+    "squad_v2": 142157,
+    "fever": 243747,
+    "halueval_qa": 10000,
+    "ragtruth": 20270
+  },
+  "by_task": {
+    "extract": 142157,
+    "verify": 243747,
+    "discriminate": 10000,
+    "ground": 20270
+  },
+  "by_label": {
+    "answerable": 102719,
+    "unanswerable": 49438,
+    "supported": 119438,
+    "refuted": 51983,
+    "not_enough_info": 72326,
+    "faithful": 11686,
+    "hallucinated": 8584
+  },
+  "answerable": 233843,
+  "span_exact": 102262,
+  "with_distractor": 10000,
+  "with_bad_spans": 7641,
+  "dropped": {
+    "squad_v2:duplicate": 35,
+    "fever:empty_context": 396,
+    "fever:duplicate": 69,
+    "ragtruth:quality_not_good": 173,
+    "ragtruth:duplicate": 47
+  },
+  "dropped_total": 720,
+  "schema": [
+    "id",
+    "source",
+    "task",
+    "split",
+    "context",
+    "question",
+    "answer",
+    "answerable",
+    "span_exact",
+    "span_start",
+    "label",
+    "distractor",
+    "bad_spans",
+    "meta"
+  ]
+}

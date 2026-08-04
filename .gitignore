@@ -8,3 +8,8 @@ app/src-tauri/target/
 # Recording output — regenerate with scripts/record.ps1
 app/src-tauri/target/release/recording/
 site/AgentSwarm_*.msi
+
+# secrets
+.env
+.env.local
+!.env.example

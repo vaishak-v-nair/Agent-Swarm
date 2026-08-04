@@ -1,0 +1,35 @@
+# Data is rebuildable; that is what fetch.py and build.py are for.
+# Committing 178 MB of parquet would make every clone slow to protect nothing.
+datasets/*/*.parquet
+datasets/agentswarm/*.parquet
+
+# ...but the things that make the data reproducible ARE tracked:
+!datasets/**/*.py
+!datasets/**/*.md
+!datasets/**/manifest.json
+!datasets/**/REPORT.json
+
+# Trained weights: rebuildable from train.py, and a safetensors file per run
+# would bloat history fast. The EVAL RESULTS are tracked, because those are the
+# claims — the numbers are the deliverable, the weights are a build artefact.
+datasets/agentswarm/models/**
+!datasets/agentswarm/models/
+!datasets/agentswarm/models/*.json
+
+# The SQLite store: machine-local memory, and it contains transcript excerpts.
+.store/
+
+# The standalone git history from before Recall moved inside agent-swarm.
+# Kept on disk in case it is ever wanted; never tracked by the parent repo.
+_git-standalone-history/
+
+node_modules/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+
+__pycache__/
+*.pyc

@@ -1,0 +1,13 @@
+{
+  "name": "recall",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Recall M1 — the engine: candidate generation, extraction, store, answer with receipts.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "candidates": "node scripts/measure-candidates.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

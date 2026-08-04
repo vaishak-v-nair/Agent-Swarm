@@ -5,13 +5,12 @@ purpose: resume point — read this first
 
 # NEXT SESSION — start here
 
-The state of everything, and what remains. Updated at the close of the data +
-RAG session (2026-08-04).
+Updated at the close of the reorganisation + ML session (2026-08-04).
 
-> **Two projects run in parallel now.** AgentSwarm is the cockpit; **Recall** is
-> the memory layer, and it lives in a *separate repo* at `E:\Recall\`. They are
-> joined by an MCP server, so an AgentSwarm pane can query Recall. Read
-> `E:\Recall\Recall Vault\03 Plans\` for Recall's own history — P1 through P8.
+> **One folder now.** Recall used to live at `E:\Recall\`. It is now
+> `E:\agent-swarm\recall\`, inside this repo. Everything this project produces
+> lives on **E:** — see `DRIVES.md` for what is on C:, what moved, and what
+> genuinely cannot.
 
 ## Where AgentSwarm stands
 
@@ -19,136 +18,145 @@ Feature-complete for launch and **verified by machinery, not claims**:
 - 37 Rust + 28 JS tests · `npm run verified` = tests + smoke on the real binary
 - `agentswarm --doctor` — seven checks, every failure prints its fix
 - `npm run record` — the app films itself driving its own UI (`--demo`)
-- Error-dialog bug fixed at the OS level (Job Object; 0 orphaned processes)
-- `site/` — self-contained website, ready to deploy as-is to Vercel
-- `site/intro.mp4` — **54.2s** film with sound. Superseded cuts kept beside it.
+- `site/` — self-contained website, ready to deploy to Vercel
+- `site/intro.mp4` — 54.2s film with sound
 - Fresh MSI at `app/src-tauri/target/release/bundle/msi/`
 
 Launch: `.\agentswarm` from the repo, or `scripts\add-to-path.ps1` once.
 
-## Where Recall stands — `E:\Recall\`
-
-Two packages, **71 tests**, plus a dataset.
+## Where Recall stands — `E:\agent-swarm\recall\`
 
 | piece | state |
 |---|---|
-| `recall-core/` | transcript parsing, the session→commit join, locators, redaction. 19 tests. |
-| `recall/` | candidates → judge → SQLite FTS5 store → answer with citations. 55 tests. |
-| `bin/recall-mcp.js` | **registered and connected**; verified against a live Claude Code session. Read-only on purpose. |
-| `src/providers.js` | ollama + Groq/DeepSeek/OpenRouter/Together/LM Studio through one client. |
-| `datasets/nimbus/` | **NEW — 416,174 rows, four sources, one schema.** |
+| `recall-core/` | transcript parsing, session→commit join, locators, redaction. **19 tests** |
+| `recall/` | candidates → judge → FTS5 store → answer with citations. **56 tests** |
+| `recall/bin/recall-mcp.js` | **registered, user-scoped, connected.** Read-only on purpose |
+| `recall/src/providers.js` | ollama + Groq/DeepSeek/OpenRouter/Together/LM Studio, one client |
+| `.store/` | the SQLite store, **migrated off C:** — 62 cards |
+| `datasets/agentswarm/` | **416,174 rows**, one schema, plus RAG + training code |
 
-**The billing fact, because it is easy to get backwards:** `ANTHROPIC_API_KEY`
-bills a *separate* pay-per-token account. The **`claude` CLI is the one that
-spends the Max subscription** — measured $0.0221 for a 10-token prompt. Ollama
-is free. So the zero-setup path was the expensive one.
+**The billing fact, easy to get backwards:** `ANTHROPIC_API_KEY` bills a
+*separate* pay-per-token account. The **`claude` CLI is what spends the Max
+subscription** — measured $0.0221 for a 10-token prompt. Ollama is free. The
+zero-setup path was the expensive one.
 
-## Nimbus — read this before touching data
+**Keys go in `E:\agent-swarm\.env`** (gitignored; `.env.example` is tracked and
+explains each one). No exporting per shell.
 
-`E:\Recall\datasets\nimbus\` — one dataset for the rest of the project.
-**Read it only through `load.py`.**
+## The dataset — read this before touching data
+
+`E:\agent-swarm\recall\datasets\agentswarm\`. **Read it only via `load.py`.**
+
+> **Naming:** it was briefly called "Nimbus". That was a mistake — Nimbus is a
+> different project. It is **the AgentSwarm dataset**; row ids are `as-*`.
 
 ```python
-from nimbus.load import load, balanced, contract
-for r in load("dev", task="extract", limit=500): ...
+from agentswarm.load import load, balanced, contract
 ```
 
 Built against one goal: *given a CONTEXT and a QUESTION, return a VERBATIM span,
-or abstain.* That is the judge's contract **and** the generation half of RAG —
-the same sentence twice, which is why one dataset serves both.
+or abstain.* That is the judge's contract **and** the generation half of RAG.
 
 - 416,174 rows · train 373,069 / dev 37,740 / test 5,365
 - squad_v2 142,157 `extract` · fever 243,747 `verify` · halueval 10,000
   `discriminate` · ragtruth 20,270 `ground`
-- `span_exact` is **recomputed**, never trusted from the source
-- `bad_spans` = word-level hallucination spans · `distractor` = the fluent
-  unsupported answer to refuse
+- `span_exact` **recomputed**, never trusted · `bad_spans` = word-level
+  hallucination spans · `distractor` = the fluent unsupported answer to refuse
 - Verified: **92,719/92,719** spans character-exact · **zero** split leakage ·
-  720 dropped, each counted by reason in `REPORT.json`
+  720 dropped, each counted by reason
 
-**RAG is three numbers, not one** (`rag.py`) — retrieval, grounding, abstention,
-scored separately because one end-to-end score cannot say which half broke.
+### RAG is three numbers, not one — `rag.py`
+
+Retrieval, grounding, abstention scored separately, because one end-to-end
+score cannot say which half broke.
 
 **Measured BM25 baseline: recall@1 0.892 · recall@3 0.966 · MRR 0.930.**
 Any embedding retriever must beat that. At 0.966 the headroom is much smaller
-than intuition suggests — this is the guard against a week spent on a vector
-index that wins nothing.
+than intuition suggests — the guard against a week spent on a vector index that
+wins nothing.
 
-Full write-up: `Recall Vault/03 Plans/P8 - Nimbus, and RAG measured.md`.
+### ML — `train.py`, and the wall it hit
+
+Task: **answerability** — does this context support an answer at all. The half
+that actually fails, and a millisecond CPU classifier can gate the expensive
+model so you only pay for candidates that survive.
+
+- **TF-IDF + logreg baseline: 50.5% — chance.** A finding, not a failure:
+  SQuAD v2's unanswerable questions are *built* to share vocabulary with the
+  passage. Anything above 50% is learning something real.
+- **No CUDA on this machine.** Measured **0.27 s/row/epoch** → a 24k × 2 run is
+  ~3.5 hours. Hence `--freeze`, training only the upper layers (7.2M of 22.7M).
+- A 2k × 1 run **collapsed to one class**. Kept as evidence, not hidden.
+- `prajjwal1/bert-tiny` **will not load** — transformers 5.x dropped slow→fast
+  tokenizer conversion. Default is `all-MiniLM-L6-v2`.
+
+Full write-up: `recall/Recall Vault/03 Plans/P8 - The dataset, and RAG measured.md`.
 
 ## Build queue for the next session
 
-1. **Hybrid retrieval for Recall.** Recall's `answer()` is already RAG (FTS5
-   retrieve → grounded synthesis → `enforceCitations` drops uncited sentences).
-   What is missing is the *semantic* half: a question phrased differently from
-   the card misses. Add embeddings, measure with `rag.py`, and **only keep it if
-   it beats 0.892 / 0.966.**
-2. **Turn `judgeCapability()` into a measurement.** `recall/src/providers.js`
-   refuses sub-12B local models on a hard-coded threshold inferred from one bad
-   model. `python rag.py answer --n 50 --model <m>` gives a real per-model
-   number. An hour, not a project.
-3. **THE ≥90% PRECISION GATE — only Vaishak can clear it.** ~50 published cards
+1. **Dense retrieval vs BM25.** Embed contexts with MiniLM, compare against
+   0.892 / 0.966. **Only keep it if it wins** — the number exists precisely so
+   this can be decided rather than assumed.
+2. **Finish the answerability model.** CPU is the constraint; consider a
+   Colab/Kaggle GPU session for one proper run, then ship the weights back.
+3. **Turn `judgeCapability()` into a measurement.** It refuses sub-12B local
+   models on a hard-coded threshold inferred from one bad model.
+   `python rag.py answer --n 50 --model <m>` gives a real number per model.
+4. **THE ≥90% PRECISION GATE — only Vaishak can clear it.** ~50 published cards
    read by a human. Machine checks cannot substitute: a card can be faithful to
-   its quote and still useless. This decides whether Recall earns more hours.
-4. **THE BASELINE WEEK** — armed 2026-08-01, still **zero entries**. Four exit
-   tests need real use; no amount of building substitutes.
+   its quote and still useless.
+5. **THE BASELINE WEEK** — armed 2026-08-01, still **zero entries**.
    `log A glance <what happened>` from any terminal.
-5. **`site/index.html` still plays the raw `agentswarm.mp4`,** not the 54.2s
-   film. Decide which the site leads with.
-6. **Deploy `site/`** to Vercel; wire the MSI download link.
-7. **`/design-shotgun`** — never ran (context died twice). Point it at
-   `app/src/style.css` + a fresh `npm run record` frame.
-8. Parked with its four gating questions: the **CV agent** idea, in
-   `03 Plans/P8 - Ideas (inbox).md`.
+6. **`site/index.html` still plays the raw `agentswarm.mp4`,** not the film.
+7. **Deploy `site/`** to Vercel; wire the MSI download link.
+8. Parked with four gating questions: the **CV agent** idea.
 
 ## Publish blockers — only Vaishak can decide
 
 1. **No LICENSE file.** The site says "open source"; the repo has no licence.
-2. **The vaults are inside the repo.** `AgentSwarm intelligence/` holds private
-   session transcripts. Publish from a clean repo, or move the vaults out.
+2. **The vaults are inside the repo** — private transcripts. Publish from a
+   clean repo, or move the vaults out. **Recall now lives here too**, which
+   makes this bigger, not smaller.
 3. **Unsigned MSI.** SmartScreen will warn. The site says so honestly.
 
 ## The rules this project runs on (hard-won, do not relearn)
 
-- **Never claim verified without running it.** Five user-found bugs in minutes
-  taught this; `npm run verified` enforces it.
+- **Never claim verified without running it.** `npm run verified` enforces it.
 - **A schema description is not the schema — open the file.** I declared
   RAGTruth's hallucination spans missing after reading a loader's feature list.
-  They were there all along, and it nearly cost us the most on-target source.
-  Verify data claims against bytes, and verify a *correction* harder than the
-  claim it corrects.
-- **Backslashes never travel through scripted replacements.** Seven escaping
-  bugs. Write/Edit only; Rust builds paths; fixtures live in files.
+  They were there, and it nearly cost the most on-target source. Verify a
+  *correction* harder than the claim it corrects.
+- **Backslashes never travel through scripted replacements.** Write/Edit only.
 - **Print the refused thing, do not trust the count.** A faithfulness bug looked
   like model fabrication until the rejected quotes were printed; failures fell
   from 62% to 19% and most of it was my bug.
 - **Regex generates candidates; it is never the final layer.** 50.3% of real
   candidates contain no keyword at all.
+- **Everything lives on E:.** Before writing to a home directory, check whether
+  an env var or project path can take it. If a tool hard-codes the path, say so
+  and mirror instead of pretending it moved.
 - **Drive the UI before shipping** — `app/harness.html` and `--demo`.
 - **Never steal focus on a machine someone is using.**
 - **A wrong reading is worse than no reading** — degrade by saying so.
-- **Calm panel, urgent pilot.** Nothing loops or pulses. **This is a rule about
-  the app, not about everything with the app's name on it.** Applied to the
-  intro film it produced something inert that had to be rebuilt twice — a film
-  someone chose to press play on is a different medium. See
-  `intro-video/frame.md`.
+- **Calm panel, urgent pilot.** Nothing loops or pulses. **A rule about the app,
+  not about everything with the app's name on it** — applied to the intro film
+  it produced something inert that had to be rebuilt twice.
 - **Video work is saved three places** — project vault, global mirror, and
-  `E:\Second Brain\Video Intelligence`, so craft compounds across projects.
-- Vocabulary is settled in [[../01 Identity/I1 - What Things Are Called|I1]] —
-  one word per concept.
+  `E:\Second Brain\Video Intelligence`.
 
 ## Where everything lives
 
 | what | where |
 |---|---|
-| build logs B1–B13 | `04 Build Logs/` |
-| plans, P8 CEO review, baseline log P7 | `03 Plans/` |
-| vocabulary I1 | `01 Identity/` |
-| the intro film | `intro-video/` — BRIEF, STORYBOARD, frame.md, compositions |
-| **Recall (separate repo)** | `E:\Recall\` — `recall-core/`, `recall/`, `datasets/` |
-| **Recall's vault** | `E:\Recall\Recall Vault\03 Plans\` — P1–P8 |
-| **Nimbus** | `E:\Recall\datasets\nimbus\` — `build.py`, `load.py`, `rag.py` |
+| build logs B1–B13 | `AgentSwarm intelligence/04 Build Logs/` |
+| plans, CEO review, baseline log | `AgentSwarm intelligence/03 Plans/` |
+| **memory mirror (on E:)** | `AgentSwarm intelligence/06 Memory/` — `scripts\sync-memory.ps1` |
+| the intro film | `intro-video/` |
+| **Recall** | `recall/` — `recall-core/`, `recall/`, `datasets/`, `.store/` |
+| **Recall's vault** | `recall/Recall Vault/03 Plans/` — P1–P8 |
+| **the dataset** | `recall/datasets/agentswarm/` — build, load, rag, train |
+| **drive layout** | `DRIVES.md` |
+| **keys** | `.env` (gitignored) · `.env.example` (tracked) |
 | video craft, cross-project | `E:\Second Brain\Video Intelligence\` |
 | global mirrors | `E:\Second Brain\AgentSwarm Intelligence\`, `…\Recall Intelligence\` |
-| machine memory | `C:\Users\vaish\.claude\projects\E--agent-swarm\memory\` |
-| Kaggle key (if ever needed) | `C:\Users\vaish\.kaggle\kaggle.json` |
+| live memory (C:, not movable) | `C:\Users\vaish\.claude\projects\E--agent-swarm\memory\` |

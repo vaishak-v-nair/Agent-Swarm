@@ -1,0 +1,19 @@
+- [AgentSwarm design](agent-swarm-design.md) — approved staged plan, gates G0-G2, week-0 assignment
+- [Vaishak's style](user-vaishak-style.md) — completeness instinct; force choices via episodic questions
+- [Recall design](recall-memory-design.md) — builder-exhaust memory, answer with receipts, M1-M6
+- [Tauri 2 capabilities gate](tauri2-capabilities-gate.md) — no capabilities file = listen() denied silently, commands still work
+- [Drive the UI first](drive-the-ui-before-shipping.md) — stdout+unit tests missed what one keypress found; use app/harness.html
+- [Child-session env trap](agentswarm-child-session-env.md) — inherited CLAUDE_CODE_CHILD_SESSION kills transcripts and history
+- [Verified loop](verified-loop.md) - smoke/doctor/demo/record; never claim verified without npm run verified
+- [Resume point](E:/agent-swarm) - vault note '00 Start Here/NEXT SESSION.md' holds full state + publish blockers
+- [Film craft feedback](film-craft-feedback.md) — two rejected cuts; the app's motion law does NOT govern the film
+- [Social video format](social-video-format.md) — 4:5, 10-21s, no cuts, persistent headline, live data overlay
+- [Intro film state](intro-film-state.md) — intro-video/ project, reconstructed UI, how to regenerate audio
+- [recall-core built](recall-core-built.md) — shared organs shipped+tested; git-log is NOT authorship; session cwd is not the commit repo
+- [Video work goes three places](video-work-goes-three-places.md) — project vault + global mirror + E:\Second Brain\Video Intelligence, so video craft compounds across projects
+- [Gurutva launched](gurutva-launched.md) — public Apache-2.0, gurutva.vercel.app, CI on 3.11-3.14; forum-first not HN; zero users is the metric
+- [CV agent idea](cv-agent-idea.md) — parked behind the tournament; 4 questions it must answer first
+- [Recall providers + MCP](recall-providers-and-mcp.md) — ollama is free; the claude CLI (NOT the API key) spends the subscription; MCP bridge live
+- [AgentSwarm dataset](agentswarm-dataset.md) — 416k rows, one schema, load.py only; RAG baseline recall@1 0.892 that embeddings must beat; CPU wall at 0.27s/row/epoch
+- [Everything lives on E:](everything-lives-on-e-drive.md) — Recall moved inside agent-swarm; RECALL_HOME; what can't move and why
+- [Open the file](a-schema-description-is-not-the-schema.md) — I called RAGTruth span-less by reading a feature list; verify against bytes, not docs
