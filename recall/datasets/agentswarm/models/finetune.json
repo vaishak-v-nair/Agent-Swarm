@@ -1,80 +1,81 @@
 {
   "model": "sentence-transformers/all-MiniLM-L6-v2",
-  "n": 500,
-  "accuracy": 0.46,
-  "abstain_precision": 0.0,
-  "abstain_recall": 0.0,
-  "answer_precision": 0.46,
-  "answered_when_unanswerable": 270,
+  "n": 3000,
+  "accuracy": 0.618,
+  "abstain_precision": 0.7421,
+  "abstain_recall": 0.3824,
+  "answer_precision": 0.5739,
+  "answered_when_unanswerable": 943,
   "confusion": {
-    "tp": 0,
-    "fp": 0,
-    "tn": 230,
-    "fn": 270
+    "tp": 584,
+    "fp": 203,
+    "tn": 1270,
+    "fn": 943
   },
-  "abstain_f1": 0.0,
-  "train_rows": 2000,
-  "epochs": 1,
-  "batch_size": 16,
-  "lr": 5e-05,
-  "max_len": 160,
-  "seconds": 536.6,
+  "abstain_f1": 0.5047,
+  "train_rows": 12000,
+  "epochs": 2,
+  "batch_size": 32,
+  "lr": 8e-05,
+  "max_len": 128,
+  "frozen_layers": 2,
+  "seconds": 4452.1,
   "threshold_curve": [
     {
       "model": "sentence-transformers/all-MiniLM-L6-v2@0.3",
-      "accuracy": 0.542,
-      "abstain_precision": 0.5416,
-      "abstain_recall": 0.9889,
-      "abstain_f1": 0.6999,
-      "answered_when_unanswerable": 3
+      "accuracy": 0.6373,
+      "abstain_precision": 0.661,
+      "abstain_recall": 0.59,
+      "abstain_f1": 0.6235,
+      "answered_when_unanswerable": 626
     },
     {
       "model": "sentence-transformers/all-MiniLM-L6-v2@0.4",
-      "accuracy": 0.466,
-      "abstain_precision": 0.6154,
-      "abstain_recall": 0.0296,
-      "abstain_f1": 0.0565,
-      "answered_when_unanswerable": 262
+      "accuracy": 0.627,
+      "abstain_precision": 0.6954,
+      "abstain_recall": 0.4754,
+      "abstain_f1": 0.5647,
+      "answered_when_unanswerable": 801
     },
     {
       "model": "sentence-transformers/all-MiniLM-L6-v2@0.5",
-      "accuracy": 0.46,
-      "abstain_precision": 0.0,
-      "abstain_recall": 0.0,
-      "abstain_f1": 0.0,
-      "answered_when_unanswerable": 270
+      "accuracy": 0.618,
+      "abstain_precision": 0.7421,
+      "abstain_recall": 0.3824,
+      "abstain_f1": 0.5047,
+      "answered_when_unanswerable": 943
     },
     {
       "model": "sentence-transformers/all-MiniLM-L6-v2@0.6",
-      "accuracy": 0.46,
-      "abstain_precision": 0.0,
-      "abstain_recall": 0.0,
-      "abstain_f1": 0.0,
-      "answered_when_unanswerable": 270
+      "accuracy": 0.601,
+      "abstain_precision": 0.7835,
+      "abstain_recall": 0.2986,
+      "abstain_f1": 0.4324,
+      "answered_when_unanswerable": 1071
     },
     {
       "model": "sentence-transformers/all-MiniLM-L6-v2@0.7",
-      "accuracy": 0.46,
-      "abstain_precision": 0.0,
-      "abstain_recall": 0.0,
-      "abstain_f1": 0.0,
-      "answered_when_unanswerable": 270
+      "accuracy": 0.579,
+      "abstain_precision": 0.8235,
+      "abstain_recall": 0.22,
+      "abstain_f1": 0.3472,
+      "answered_when_unanswerable": 1191
     },
     {
       "model": "sentence-transformers/all-MiniLM-L6-v2@0.8",
-      "accuracy": 0.46,
-      "abstain_precision": 0.0,
-      "abstain_recall": 0.0,
-      "abstain_f1": 0.0,
-      "answered_when_unanswerable": 270
+      "accuracy": 0.557,
+      "abstain_precision": 0.8722,
+      "abstain_recall": 0.1519,
+      "abstain_f1": 0.2587,
+      "answered_when_unanswerable": 1295
     },
     {
       "model": "sentence-transformers/all-MiniLM-L6-v2@0.9",
-      "accuracy": 0.46,
-      "abstain_precision": 0.0,
-      "abstain_recall": 0.0,
-      "abstain_f1": 0.0,
-      "answered_when_unanswerable": 270
+      "accuracy": 0.529,
+      "abstain_precision": 0.9385,
+      "abstain_recall": 0.0799,
+      "abstain_f1": 0.1473,
+      "answered_when_unanswerable": 1405
     }
   ],
   "best_threshold_by_abstain_f1": "sentence-transformers/all-MiniLM-L6-v2@0.3"

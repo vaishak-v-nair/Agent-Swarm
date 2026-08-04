@@ -84,6 +84,14 @@ model so you only pay for candidates that survive.
 - **TF-IDF + logreg baseline: 50.5% — chance.** A finding, not a failure:
   SQuAD v2's unanswerable questions are *built* to share vocabulary with the
   passage. Anything above 50% is learning something real.
+- **Trained: 0.618 accuracy**, +11.3 over chance (MiniLM-L6, 12k × 2 epochs,
+  2 layers frozen, 74 min CPU, 3k held-out dev).
+- **At threshold 0.9: abstain precision 0.939**, recall 0.080. Right 94% of the
+  time when it says "no answer" — the shape a **gate** wants. Those candidates
+  drop before the expensive model is called.
+- **Undertrained, not converged** — loss still falling at the last step
+  (0.6663 → 0.4676) on 12k of 142k rows. Published SQuAD 2.0 answerability is
+  ~0.85–0.90 with full fine-tuning on GPU. **The limit is compute, not method.**
 - **No CUDA on this machine.** Measured **0.27 s/row/epoch** → a 24k × 2 run is
   ~3.5 hours. Hence `--freeze`, training only the upper layers (7.2M of 22.7M).
 - A 2k × 1 run **collapsed to one class**. Kept as evidence, not hidden.

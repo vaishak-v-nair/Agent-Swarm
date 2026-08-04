@@ -145,6 +145,40 @@ SQuAD v2's unanswerable questions are *constructed* to share vocabulary with the
 passage, so bag-of-words has nothing to grab. Anything that beats 50% is
 learning something real about the question–context relationship.
 
+### Measured result
+
+`all-MiniLM-L6-v2`, 12,000 rows × 2 epochs, embeddings + 2 layers frozen,
+**74 minutes on CPU**, evaluated on 3,000 held-out dev rows:
+
+| | baseline | trained | |
+|---|---|---|---|
+| accuracy | 0.505 | **0.618** | +11.3 points over chance |
+| abstain precision @0.5 | 0.519 | **0.742** | |
+| abstain F1 (best, @0.3) | 0.377 | **0.624** | |
+
+**The threshold curve is the useful part, not the headline accuracy:**
+
+| threshold | accuracy | abstain precision | abstain recall |
+|---|---|---|---|
+| 0.3 | 0.637 | 0.661 | 0.590 |
+| 0.5 | 0.618 | 0.742 | 0.382 |
+| 0.7 | 0.579 | 0.824 | 0.220 |
+| **0.9** | 0.529 | **0.939** | 0.080 |
+
+At 0.9 the model says "this context does not answer the question" and is right
+**94% of the time** — while catching only 8% of unanswerable cases. That is
+exactly the shape a *gate* wants: it does not need to catch everything, it needs
+to be trustworthy when it does speak. Those candidates can be dropped before the
+expensive model is ever called.
+
+**It is not good enough to deploy, and the reason is not the method.** Loss was
+still falling at the final step (0.4676, from 0.6663), so the run is
+*undertrained*, not converged — it saw 12,000 of 142,157 available rows, with a
+third of the encoder frozen, because CPU was the ceiling. Published results on
+SQuAD 2.0 answerability sit near 0.85–0.90 with full fine-tuning of a larger
+model on a GPU. One GPU session would settle whether this approach reaches that;
+nothing here says it will.
+
 ### The CPU constraint, stated plainly
 
 This machine has **no CUDA**. Measured throughput: **0.27 s per row per epoch**

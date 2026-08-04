@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 9162a494-02c3-49ab-846a-4c3f8804c34d
-  modified: 2026-08-04T09:08:22.567Z
+  modified: 2026-08-04T10:22:51.496Z
 ---
 
 **`E:\agent-swarm\recall\datasets\agentswarm\`** — 416,174 rows, built
@@ -62,6 +62,16 @@ half that fails, and a millisecond CPU classifier can gate the expensive model.
   unanswerable questions are *built* to share vocabulary with the passage, so
   bag-of-words has nothing to grab. Anything above 50% is learning something
   real about the question-context relationship.
+- **Trained result: 0.618 accuracy** (all-MiniLM-L6-v2, 12k rows x 2 epochs,
+  2 layers frozen, 74 min CPU, 3k held-out dev). +11.3 points over chance.
+- **The threshold curve is the useful part.** At t=0.9 abstain precision is
+  **0.939** with recall 0.080 — right 94% of the time when it says "no answer".
+  That is what a GATE wants: not catching everything, but trustworthy when it
+  speaks. Those candidates drop before the expensive model is called.
+- **Undertrained, not converged** — loss still falling at the last step
+  (0.6663 -> 0.4676) on 12k of 142k available rows. Published SQuAD 2.0
+  answerability sits ~0.85-0.90 with full fine-tuning on GPU. Not deployable
+  yet, and the limit is compute, not method.
 - **No CUDA on this machine.** Measured **0.27 s/row/epoch** at max_len 160 →
   a 24k x 2 run is ~3.5 hours. Hence `--freeze`, which trains only the upper
   layers (7.2M of 22.7M params).

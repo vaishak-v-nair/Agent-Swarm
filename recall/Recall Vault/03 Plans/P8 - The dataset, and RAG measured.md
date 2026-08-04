@@ -126,6 +126,38 @@ default is `all-MiniLM-L6-v2`, which ships a fast tokenizer.
 
 Seven thresholds are reported, not one flattering point.
 
+### The result
+
+`all-MiniLM-L6-v2`, 12,000 rows × 2 epochs, embeddings + 2 layers frozen,
+**74 minutes of CPU**, on 3,000 held-out dev rows:
+
+| | baseline | trained |
+|---|---|---|
+| accuracy | 0.505 (chance) | **0.618** |
+| abstain precision @0.5 | 0.519 | **0.742** |
+| abstain F1 (best, @0.3) | 0.377 | **0.624** |
+
+**The curve matters more than the headline:**
+
+| threshold | accuracy | abstain precision | abstain recall |
+|---|---|---|---|
+| 0.3 | 0.637 | 0.661 | 0.590 |
+| 0.5 | 0.618 | 0.742 | 0.382 |
+| 0.7 | 0.579 | 0.824 | 0.220 |
+| **0.9** | 0.529 | **0.939** | 0.080 |
+
+At 0.9 it says "this context does not answer the question" and is right **94% of
+the time**, catching 8% of unanswerable cases. That is the shape a *gate* wants:
+it does not have to catch everything, it has to be trustworthy when it speaks.
+Those candidates get dropped before the expensive model is called at all.
+
+**Not good enough to deploy, and the reason is not the method.** Loss was still
+falling at the last step — 0.6663 → 0.4676 — so this is *undertrained*, not
+converged. It saw 12,000 of 142,157 available rows with a third of the encoder
+frozen, because CPU was the ceiling. Published SQuAD 2.0 answerability results
+sit near 0.85–0.90 with full fine-tuning of a larger model on a GPU. One GPU
+session settles whether this approach gets there. Nothing here says it will.
+
 ## Where Recall already is RAG, and where it is not
 
 Recall's `answer()` **is** retrieval-augmented generation today: FTS5 retrieval
