@@ -27,8 +27,7 @@ The pane you are reading gets the whole room. Measured: **864px staged against a
 58px card.** The others become live cards in a rail — state, elapsed time, and
 their most recent line, which is enough to decide whether to switch.
 
-Nothing was lost that was being used. The [[I1 - What Things Are Called|muster
-rail]] still shows every pane at once; that is what it is for.
+Nothing was lost that was being used. The [[I1 - What Things Are Called|muster rail]] still shows every pane at once; that is what it is for.
 
 **Panes move between containers; they are never rebuilt.** Verified — after a
 switch there are still exactly two xterm instances, so scrollback, process and

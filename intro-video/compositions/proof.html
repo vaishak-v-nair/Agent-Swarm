@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        @font-face {
+          font-family: "Segoe UI Variable Display";
+          src: local("Segoe UI Variable Display"), local("Segoe UI Semibold"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Segoe UI Variable Text";
+          src: local("Segoe UI Variable Text"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Cascadia Mono";
+          src: local("Cascadia Mono"), local("Cascadia Code"), local("Consolas");
+        }
+
+        #root {
+          position: absolute;
+          inset: 0;
+          background: #141519;
+          overflow: hidden;
+          font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        }
+
+        /* This is the one beat in the film that is real footage, and it is the
+           beat that is ABOUT the real footage. Everything else is a faithful
+           reconstruction, so the film may not claim to be unretouched — see
+           STORYBOARD.md, "Honesty rules". */
+        #frame {
+          position: absolute;
+          left: 336px;
+          top: 132px;
+          width: 1248px;
+          height: 827px;
+          border: 1px solid #282a30;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 50px 100px rgba(0, 0, 0, 0.6);
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        #frame video {
+          position: absolute;
+          left: -16px;
+          top: -10px;
+          width: 1280px;
+          height: 848px;
+        }
+
+        /* Provenance, stated in the machine's own face. */
+        #prov {
+          position: absolute;
+          left: 336px;
+          top: 84px;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 21px;
+          letter-spacing: 0.04em;
+          color: #8a8c93;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        #prov b {
+          color: #d9a05b;
+          font-weight: 400;
+        }
+
+        /* A live REC lamp is honest here: this frame IS a recording. It fires
+           once on arrival and then holds — no pulse (frame.md). */
+        #rec {
+          position: absolute;
+          left: 1476px;
+          top: 84px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 21px;
+          letter-spacing: 0.12em;
+          color: #8a8c93;
+          opacity: 0;
+          will-change: opacity;
+        }
+        #recdot {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          background: #c9727f;
+        }
+
+        #stats {
+          position: absolute;
+          left: 336px;
+          width: 1248px;
+          top: 984px;
+          display: flex;
+          justify-content: center;
+          gap: 48px;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 26px;
+          color: #8a8c93;
+        }
+        .stat {
+          opacity: 0;
+          white-space: nowrap;
+          will-change: transform, opacity;
+        }
+        .stat b {
+          color: #6fae86;
+          font-weight: 400;
+          font-variant-numeric: tabular-nums;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="proof"
+        data-width="1920"
+        data-height="1080"
+        data-duration="5.8"
+      >
+        <div id="prov">real recording &middot; <b>agentswarm --demo</b></div>
+        <div id="rec"><span id="recdot"></span>REC</div>
+
+        <div id="frame" data-layout-allow-overflow>
+          <video
+            id="pv"
+            src="assets/agentswarm-seekable.mp4"
+            data-start="0.2"
+            data-duration="5.4"
+            data-media-start="2.0"
+            data-track-index="0"
+            muted
+            playsinline
+          ></video>
+        </div>
+
+        <div id="stats">
+          <span class="stat" id="s1"><b>37</b> Rust tests</span>
+          <span class="stat" id="s2"><b>28</b> JS tests</span>
+          <span class="stat" id="s3"><b>7</b> doctor checks</span>
+          <span class="stat" id="s4"><b>0</b> orphaned processes</span>
+        </div>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          var tl = gsap.timeline({ paused: true });
+
+          // Hard cut in — the only one in the film, so it lands flat and fast.
+          tl.fromTo(
+            "#frame",
+            { opacity: 0, scale: 1.04 },
+            { opacity: 1, scale: 1, duration: 0.4, ease: "power3.out" },
+            0.12,
+          );
+          tl.fromTo("#prov", { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: 0.3, ease: "power4.out" }, 0.32);
+          tl.fromTo("#rec", { opacity: 0 }, { opacity: 1, duration: 0.26 }, 0.4);
+
+          // The numbers arrive as a wave, late, once the footage has been read.
+          ["#s1", "#s2", "#s3", "#s4"].forEach(function (id, i) {
+            var at = 2.6 + i * 0.12;
+            tl.set(id, { opacity: 1, y: 22 }, at);
+            tl.to(id, { y: 0, duration: 0.26, ease: "power4.out" }, at);
+          });
+
+          // Hand off to the end card: the footage recedes, the numbers hold.
+          tl.to("#frame", { opacity: 0, scale: 0.97, duration: 0.5, ease: "power2.in" }, 5.3);
+          tl.to(["#prov", "#rec"], { opacity: 0, duration: 0.34 }, 5.36);
+
+          window.__timelines["proof"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

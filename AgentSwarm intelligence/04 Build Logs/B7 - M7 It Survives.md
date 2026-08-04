@@ -98,8 +98,7 @@ M1 terminal · M2 understanding · M3 attention · M4 habits · M5 reach · M6 m
 with receipts · **M7 survival**.
 
 Seven milestones. The unproven thing has not moved, and cannot be moved by
-building an eighth: **four exit tests still need a week of real use.** [[P7 -
-Baseline Log (fill daily)|The baseline week]] started 2026-08-01 and is still
+building an eighth: **four exit tests still need a week of real use.** [[P7 - Baseline Log (fill daily)|The baseline week]] started 2026-08-01 and is still
 empty.
 
 M7 is at least the milestone that makes that week easier to run — the app now

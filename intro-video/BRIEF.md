@@ -1,32 +1,57 @@
 ---
 workflow: general-video
 flow: companion
+storyboard: no
+message: "Five agents are working — this is the one window that tells you whose turn it is"
+destination: website
+aspect: 1920x1080
+language: en
+length: 72s
+angle: product-intro
 ---
 
-# AgentSwarm — introduction video
+## Intent
 
-**Deliverable:** ~75s product introduction, 1280×848 (or 1920×1080 with pillarboxed
-footage), for the website and social.
+The introduction film for AgentSwarm, for the website and social. It replaces the
+30.5s ffmpeg cut at `site/intro.mp4`, which was assembled from crops and drawtext
+because there was no time to animate properly. This is the animated replacement.
 
-**Structure:**
-1. Title (~4s) — wordmark "agentswarm" in brand pink on graphite, subtitle
-   "the terminal built for agentic coding".
-2. Problem (~5s) — "Five agents are working." / "Which one is waiting on you?"
-   (second line amber).
-3. Footage (~55s) — `E:\agent-swarm\site\agentswarm.mp4` (1280×848, the app
-   driving its own UI; already carries on-screen narration in its bar). Optional
-   lower-third captions naming each beat: sending work, pin, find, plain english,
-   timeline, changes.
-4. End card (~6s) — `agentswarm --doctor` in Cascadia Mono amber, then
-   "open source · Windows" in grey.
+The audience is a developer who already runs several coding agents at once and has
+felt the specific problem: something finished, something is blocked, and finding
+out which means checking every window. Tone: instrument, not assistant.
 
-**Brand tokens:** bg #141519, surface #1b1c21, fg #d8d6d1, dim #7d7f86,
-brand #d6547a (wordmark only), amber #d9a05b, green #6fae86, blue #7f9dc0.
-Type: Segoe UI Variable for prose, Cascadia Mono for data/commands.
-Motion rule: transitions may explain a change; nothing loops or pulses.
+## Assets
 
-**Voice:** instrument, not assistant. State facts, never plead. No hype words.
+- `assets/agentswarm-seekable.mp4` — the real recording, 1280×848, 64s. The app
+  driving its own UI via `agentswarm --demo`. Staged from `site/agentswarm.mp4`
+  and re-encoded to 30 fps with 1-second keyframes: the 4 fps original had
+  keyframes 11.5s apart, and the renderer refused to ship clips it could not
+  seek accurately. Same pixels.
+- `frame.md` — design truth, derived from the product's own `app/src/style.css`.
 
-**Do not** invent product claims. Everything shown must be the real footage or a
-real command. A fallback ffmpeg version exists at `site/intro.mp4`; this brief is
-for the properly-animated replacement.
+## Customizations
+
+- **Motion blueprints** — every scene cites a blueprint or named rules; nothing is
+  improvised. See `STORYBOARD.md`.
+- **Designed camera on the footage** — `coordinate-target-zoom` per beat, framing
+  the region that actually carries the point, rather than showing a whole window
+  and hoping the viewer finds it.
+- **A designed scene the footage cannot supply** — `annunciator` (frame 04). The
+  colour language is the product's core idea and no single recorded frame states
+  it legibly.
+
+## Notes
+
+- **Audio: three layers, all offline.** MusicGen music bed (deps installed on
+  request), Kokoro voiceover, and the media-use bundled Pixabay SFX set. Mixed
+  once in `scripts/build-audio.py` with the bed side-chain ducked under the
+  voice. A licensed track can replace `bedA/bedB` without touching a scene.
+- **Length is 72s**, set by the real voiceover durations rather than estimated.
+- **v2 rebuild.** v1 was rejected as draft-quality. The diagnosis and the three
+  decisions that answer it live in `STORYBOARD.md`. The UI is now reconstructed
+  in HTML from the product's own stylesheet; real footage survives only in
+  frame 10, which is the beat that is about the recording.
+- Everything shown is the real recording or a real command. No invented product
+  claims, no mocked UI.
+- Renders locally: the film uses installed Windows system fonts (Segoe UI
+  Variable, Cascadia Mono) to match the product exactly.

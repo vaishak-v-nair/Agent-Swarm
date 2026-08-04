@@ -23,8 +23,7 @@ per query: worst query **3,664 ms → 96 ms** by storing each line twice, raw an
 lowered. The benchmark once claimed a test that did not exist; the test exists
 now (`a_changed_file_is_re_read_rather_than_served_stale`).
 
-**M14 — the app proves itself** (`c0abd15`), from [[P8 - CEO Review, the
-Verification Gap|P8]]. `npm run smoke` drives the real binary; `--doctor` checks
+**M14 — the app proves itself** (`c0abd15`), from [[P8 - CEO Review, the Verification Gap|P8]]. `npm run smoke` drives the real binary; `--doctor` checks
 seven things and every failure prints its fix; `npm run verified` gates the word.
 Then `--demo` (`dda008c`): the app drives its own UI from inside — real commands,
 pane switches, every overlay — zero OS input. `npm run record` films it.

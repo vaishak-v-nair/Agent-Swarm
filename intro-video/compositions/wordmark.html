@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        @font-face {
+          font-family: "Segoe UI Variable Display";
+          src: local("Segoe UI Variable Display"), local("Segoe UI Semibold"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Segoe UI Variable Text";
+          src: local("Segoe UI Variable Text"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Cascadia Mono";
+          src: local("Cascadia Mono"), local("Cascadia Code"), local("Consolas");
+        }
+
+        #root {
+          position: absolute;
+          inset: 0;
+          background: #141519;
+          overflow: hidden;
+          font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        }
+
+        #glow {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 1700px;
+          height: 900px;
+          margin: -450px 0 0 -850px;
+          border-radius: 50%;
+          background: radial-gradient(ellipse, rgba(214, 84, 122, 0.16), transparent 62%);
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        /* The whole lockup rides one wrapper so the exit zoom-through is a
+           single camera move rather than several elements agreeing. */
+        #lock {
+          position: absolute;
+          inset: 0;
+          perspective: 1500px;
+          will-change: transform, opacity, filter;
+        }
+
+        #mark {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 424px;
+          text-align: center;
+          font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+          font-weight: 600;
+          font-size: 158px;
+          letter-spacing: -0.04em;
+          line-height: 1;
+          color: #d6547a;
+          transform-style: preserve-3d;
+        }
+        .ch {
+          display: inline-block;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        /* A single light bar crossing the lockup once. Clipped to the wordmark
+           band and screen-blended, so it brightens letterforms without
+           touching the base colour the contrast gate reads. */
+        #sheenclip {
+          position: absolute;
+          left: 460px;
+          top: 418px;
+          width: 1000px;
+          height: 190px;
+          overflow: hidden;
+          pointer-events: none;
+        }
+        #sheen {
+          position: absolute;
+          top: -40px;
+          left: 0;
+          width: 260px;
+          height: 280px;
+          transform: skewX(-18deg);
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 214, 228, 0.5),
+            transparent
+          );
+          mix-blend-mode: screen;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        #rule {
+          position: absolute;
+          left: 460px;
+          top: 618px;
+          width: 1000px;
+          height: 2px;
+          overflow: visible;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="wordmark"
+        data-width="1920"
+        data-height="1080"
+        data-duration="4.6"
+      >
+        <div id="glow"></div>
+
+        <div id="lock">
+          <div id="mark" data-layout-allow-overlap>
+            <span class="ch">a</span><span class="ch">g</span><span class="ch">e</span
+            ><span class="ch">n</span><span class="ch">t</span><span class="ch">s</span
+            ><span class="ch">w</span><span class="ch">a</span><span class="ch">r</span
+            ><span class="ch">m</span>
+          </div>
+
+          <div id="sheenclip"><div id="sheen"></div></div>
+
+          <svg id="rule" viewBox="0 0 1000 2" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path id="rule-path" d="M0 1 H1000" stroke="#343740" stroke-width="2" />
+          </svg>
+        </div>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          var tl = gsap.timeline({ paused: true });
+
+          tl.fromTo(
+            "#glow",
+            { opacity: 0, scale: 0.7 },
+            { opacity: 1, scale: 1, duration: 0.8, ease: "power2.out" },
+            0.05,
+          );
+
+          // ---- depth-scatter-assemble on the letterforms -------------------
+          // Each glyph arrives from its own point in depth. Offsets are derived
+          // from the index, so the scatter is identical on every render.
+          var chars = document.querySelectorAll("#mark .ch");
+          for (var i = 0; i < chars.length; i++) {
+            var at = 0.18 + i * 0.034;
+            var s = i % 2 === 0 ? 1 : -1;
+            var span = "#mark .ch:nth-child(" + (i + 1) + ")";
+            tl.fromTo(
+              span,
+              {
+                opacity: 0,
+                z: -700 - ((i * 137) % 400),
+                y: 40 * s,
+                rotationY: 42 * s,
+                rotationX: -18 * s,
+              },
+              {
+                opacity: 1,
+                z: 0,
+                y: 0,
+                rotationY: 0,
+                rotationX: 0,
+                duration: 0.5,
+                ease: "power3.out",
+              },
+              at,
+            );
+          }
+
+          // ---- one light bar crosses the lockup, once ----------------------
+          tl.set("#sheen", { opacity: 1 }, 0.9);
+          tl.fromTo(
+            "#sheen",
+            { x: -300 },
+            { x: 1060, duration: 0.8, ease: "power2.inOut" },
+            0.9,
+          );
+          tl.set("#sheen", { opacity: 0 }, 1.75);
+
+          // ---- svg-path-draw: the rule writes itself ------------------------
+          // Authored length, not measured: nothing here depends on layout.
+          var LEN = 1000;
+          var path = document.getElementById("rule-path");
+          path.style.strokeDasharray = LEN;
+          path.style.strokeDashoffset = LEN;
+          tl.to(path, { strokeDashoffset: 0, duration: 0.75, ease: "power3.inOut" }, 1.05);
+
+          // ---- exit: parallax-zoom THROUGH the wordmark ---------------------
+          // The lockup passes the camera and the app scene opens already
+          // pushed-in, so the seam reads as one continuous move.
+          tl.to(
+            "#lock",
+            { scale: 2.7, opacity: 0, filter: "blur(16px)", duration: 0.95, ease: "power2.in" },
+            3.65,
+          );
+          tl.to("#glow", { opacity: 0, duration: 0.8, ease: "power2.in" }, 3.8);
+
+          window.__timelines["wordmark"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      /* The product's own faces. They are OS-bundled, so they are declared by
+         name via local() — nothing is fetched at render time. This film renders
+         on Windows; a cloud render would need these embedded first. */
+      @font-face {
+        font-family: "Segoe UI Variable Display";
+        src: local("Segoe UI Variable Display"), local("Segoe UI Semibold"), local("Segoe UI");
+      }
+      @font-face {
+        font-family: "Segoe UI Variable Text";
+        src: local("Segoe UI Variable Text"), local("Segoe UI");
+      }
+      @font-face {
+        font-family: "Cascadia Mono";
+        src: local("Cascadia Mono"), local("Cascadia Code"), local("Consolas");
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #141519;
+      }
+      body {
+        font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #141519;
+      }
+      #root > div[data-composition-src] {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* ---- Global layers -------------------------------------------------
+         v1 had none of these, and their absence is most of why it read as
+         draft. They persist across every cut, which is also what makes the
+         film feel like one object instead of seven files. */
+
+      /* A light field, not a decoration: two soft sources that drift the whole
+         length of the film so the graphite is never a flat fill. */
+      #amb {
+        position: absolute;
+        inset: -20%;
+        pointer-events: none;
+        z-index: 80;
+        mix-blend-mode: screen;
+        will-change: transform;
+      }
+      #amb-a,
+      #amb-b {
+        position: absolute;
+        border-radius: 50%;
+        will-change: transform, opacity;
+      }
+      #amb-a {
+        left: 8%;
+        top: 4%;
+        width: 1100px;
+        height: 1100px;
+        background: radial-gradient(circle, rgba(217, 160, 91, 0.13), transparent 62%);
+      }
+      #amb-b {
+        right: 4%;
+        bottom: 0%;
+        width: 1300px;
+        height: 1300px;
+        background: radial-gradient(circle, rgba(127, 157, 192, 0.09), transparent 64%);
+      }
+
+      /* Vignette (registry component `vignette`), tuned lighter than its
+         default: the brand is already near-black, and 0.7 crushes it. */
+      #hf-vignette {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 90;
+        background: radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.46) 100%);
+      }
+
+      /* Grain: the registry component's turbulence texture, but its jitter is
+         re-driven as a finite stepped tween on the timeline. The shipped
+         component uses `animation: … infinite`, which is exactly what the
+         determinism contract forbids. */
+      #grain {
+        position: absolute;
+        inset: -10%;
+        pointer-events: none;
+        z-index: 100;
+        opacity: 0.055;
+        will-change: transform;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="54.2"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div
+        id="el-cold-open"
+        data-composition-id="cold-open"
+        data-composition-src="compositions/cold-open.html"
+        data-start="0"
+        data-duration="9.8"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+
+      <div
+        id="el-wordmark"
+        data-composition-id="wordmark"
+        data-composition-src="compositions/wordmark.html"
+        data-start="9.8"
+        data-duration="4.6"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+
+      <!-- Frames 04-08 in one composition. They hand off to each other without
+           a cut, which is only possible if they share DOM (composition-patterns
+           archetype C). -->
+      <div
+        id="el-app"
+        data-composition-id="app"
+        data-composition-src="compositions/app.html"
+        data-start="14.4"
+        data-duration="22"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+
+      <div
+        id="el-annunciator"
+        data-composition-id="annunciator"
+        data-composition-src="compositions/annunciator.html"
+        data-start="36.4"
+        data-duration="5"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+
+      <div
+        id="el-proof"
+        data-composition-id="proof"
+        data-composition-src="compositions/proof.html"
+        data-start="41.4"
+        data-duration="5.8"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+
+      <div
+        id="el-end-card"
+        data-composition-id="end-card"
+        data-composition-src="compositions/end-card.html"
+        data-start="47.2"
+        data-duration="7"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+
+      <!-- Global layers sit above every scene. -->
+      <div id="amb">
+        <div id="amb-a"></div>
+        <div id="amb-b"></div>
+      </div>
+      <div id="hf-vignette"></div>
+      <div id="grain"></div>
+
+      <!-- One pre-mixed master: music bed, voiceover and every sound effect,
+           levelled and ducked in ffmpeg, where that work belongs. -->
+      <audio
+        id="el-audio"
+        src="assets/audio/master.wav"
+        data-start="0"
+        data-duration="54.2"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+    </div>
+
+    <script>
+      // The root owns only the persistent layers. Scene motion lives in scenes.
+      window.__timelines = window.__timelines || {};
+      var main = gsap.timeline({ paused: true });
+
+      // Light field: one slow monotonic drift each, opposed directions, so the
+      // frame is never static even on a held title card.
+      main.fromTo("#amb-a", { x: -90, y: -40 }, { x: 70, y: 50, duration: 54.2, ease: "none" }, 0);
+      main.fromTo("#amb-b", { x: 80, y: 40 }, { x: -80, y: -30, duration: 54.2, ease: "none" }, 0);
+
+      // Grain jitter: one finite stepped tween, ~7 discrete positions a second.
+      main.fromTo(
+        "#grain",
+        { x: 0, y: 0 },
+        { x: -220, y: -170, duration: 54.2, ease: "steps(380)" },
+        0,
+      );
+
+      window.__timelines["main"] = main;
+    </script>
+  </body>
+</html>

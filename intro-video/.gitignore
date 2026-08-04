@@ -1,0 +1,8 @@
+# Regenerable output. The shipped artifact is ../site/intro.mp4; the master
+# render (~19 MB) can be rebuilt from source with `npm run render`.
+renders/
+
+# Snapshot frames, contact sheets, and render scratch.
+.hyperframes/
+
+node_modules/

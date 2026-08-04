@@ -87,7 +87,6 @@ Every path was exercised through `app/harness.html`:
 M1 terminal · M2 understanding · M3 attention · M4 habits · **M5 reach**.
 
 The unproven thing is unchanged and cannot be fixed by building: four of six exit
-tests still need a week of real use. [[P7 - Baseline Log (fill daily)|The baseline
-week]] started today and is the only thing that will settle them.
+tests still need a week of real use. [[P7 - Baseline Log (fill daily)|The baseline week]] started today and is the only thing that will settle them.
 
 See [[B4 - M4 It Works For You]] · [[B3 - M3 Does This Pane Need Me]] · [[P4 - Milestones]]

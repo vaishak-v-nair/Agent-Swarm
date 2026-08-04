@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        /* OS-bundled faces, declared by name via local() — nothing is fetched
+           at render time. See frame.md. */
+        @font-face {
+          font-family: "Segoe UI Variable Display";
+          src: local("Segoe UI Variable Display"), local("Segoe UI Semibold"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Segoe UI Variable Text";
+          src: local("Segoe UI Variable Text"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Cascadia Mono";
+          src: local("Cascadia Mono"), local("Cascadia Code"), local("Consolas");
+        }
+        #root {
+          position: absolute;
+          inset: 0;
+          background: #141519;
+          overflow: hidden;
+          font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        }
+
+        /* coordinate-target-zoom: outer scales, inner translates. Never both
+           on one element — translate*scale is not scale*translate. */
+        .stage {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+        }
+        .zoom-outer {
+          position: absolute;
+          inset: 0;
+          transform-origin: 50% 50%;
+          will-change: transform;
+        }
+        .zoom-inner {
+          position: absolute;
+          inset: 0;
+          will-change: transform;
+        }
+
+        /* The recording sits at native resolution: 1280x848 at (320, 56).
+           No border, no shadow — the canvas IS the app's background, so the
+           window dissolves into the frame and the camera can push off-centre
+           without a box edge cutting through the shot. */
+        .win {
+          position: absolute;
+          left: 320px;
+          top: 56px;
+          width: 1280px;
+          height: 848px;
+        }
+        .win video {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 1280px;
+          height: 848px;
+        }
+
+        .rail {
+          position: absolute;
+          left: 0;
+          top: 904px;
+          width: 1920px;
+          height: 176px;
+          background: #141519;
+        }
+        .rail-line {
+          position: absolute;
+          left: 320px;
+          top: 32px;
+          width: 1280px;
+          height: 1px;
+          background: #282a30;
+        }
+        .callout {
+          position: absolute;
+          left: 320px;
+          top: 62px;
+          width: 1280px;
+          font-size: 40px;
+          font-weight: 600;
+          letter-spacing: -0.005em;
+          color: #d8d6d1;
+          opacity: 0;
+          will-change: transform;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="act-work"
+        data-width="1920"
+        data-height="1080"
+        data-duration="12.4"
+      >
+        <div class="stage">
+          <!-- The camera push is meant to leak past the frame; .stage clips it.
+               Scoped to the wrapper only — no text lives under here. -->
+          <div class="zoom-outer" id="aw-outer" data-layout-allow-overflow>
+            <div class="zoom-inner" id="aw-inner">
+              <div class="win">
+                <!-- Three cuts of the one real recording. data-media-start is the
+                     in-point; every value was read off the footage frame by frame. -->
+                <video
+                  id="aw-v1"
+                  src="assets/agentswarm-seekable.mp4"
+                  data-start="0"
+                  data-duration="6"
+                  data-media-start="2.0"
+                  data-track-index="0"
+                  muted
+                  playsinline
+                ></video>
+                <video
+                  id="aw-v2"
+                  src="assets/agentswarm-seekable.mp4"
+                  data-start="6"
+                  data-duration="3.2"
+                  data-media-start="11.0"
+                  data-track-index="0"
+                  muted
+                  playsinline
+                ></video>
+                <video
+                  id="aw-v3"
+                  src="assets/agentswarm-seekable.mp4"
+                  data-start="9.2"
+                  data-duration="3.2"
+                  data-media-start="17.0"
+                  data-track-index="0"
+                  muted
+                  playsinline
+                ></video>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rail" data-layout-allow-caption-zone>
+          <div class="rail-line"></div>
+          <div class="callout" id="aw-c1">Send work to any pane.</div>
+          <div class="callout" id="aw-c2">Read the session instead of watching it.</div>
+          <div class="callout" id="aw-c3">Pin two panes to compare.</div>
+        </div>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          var tl = gsap.timeline({ paused: true });
+
+          /* Source-pixel (sx, sy) maps to canvas (320 + sx, 56 + sy), so the
+             offset from canvas centre is (sx - 640, sy - 484) and the nested
+             counter-translate is its negation (coordinate-target-zoom).
+
+             The one addition: the callout rail owns the bottom 176px, so the
+             frame the viewer actually reads is 0-904, centred at 452 — not 540.
+             LAND_Y shifts the landing there. Solving
+             540 + (56 + sy + Ty - 540) x S = LAND_Y for Ty gives the term
+             below. Without it, a hard push buries its own subject behind the
+             rail — which is exactly what the palette beat did on the first
+             pass. */
+          var LAND_Y = 452;
+          function counter(sx, sy, S) {
+            return { x: -(sx - 640), y: -(sy - 484) + (LAND_Y - 540) / S };
+          }
+
+          // Each beat: hard-cut into its framing, then one slow monotonic push.
+          // The push is what keeps a 4 fps recording reading as film; it is a
+          // single directional move, never a loop (frame.md).
+          function beat(at, dur, sx, sy, from, to) {
+            var c = counter(sx, sy, from);
+            tl.set("#aw-outer", { scale: from }, at);
+            tl.set("#aw-inner", { x: c.x, y: c.y }, at);
+            tl.to("#aw-outer", { scale: to, duration: dur, ease: "none" }, at);
+          }
+
+          /* Targets are measured off full-resolution frames of the recording,
+             not estimated off a contact sheet — a zoom multiplies any error in
+             the centre, and the first pass shoved two beats off-frame. */
+
+          // B1 — work arriving. The establishing shot: the whole window at
+          // native size, barely pushed, because the viewer has to learn what
+          // they are looking at before the camera starts making arguments.
+          beat(0, 6.0, 640, 424, 1.0, 1.05);
+          // B2 — the semantic layer. Pushes down into the prose but stays
+          // horizontally centred: at 1.45x the window (1856px) is narrower
+          // than the frame, so any sideways aim opens a graphite gap on one
+          // edge instead of showing more app.
+          beat(6.0, 3.2, 640, 330, 1.45, 1.51);
+          // B3 — pin. Both panes have to be visible, so the camera stays wide.
+          beat(9.2, 3.2, 640, 424, 1.0, 1.04);
+
+          // --- rail callouts: waterfall-entry, binary opacity ---------------
+          function callout(id, at, out) {
+            tl.set(id, { opacity: 1, y: 30 }, at);
+            tl.to(id, { y: 0, duration: 0.22, ease: "power4.out" }, at);
+            tl.set(id, { opacity: 0 }, out);
+          }
+          callout("#aw-c1", 0.35, 5.85);
+          callout("#aw-c2", 6.2, 9.05);
+          callout("#aw-c3", 9.4, 12.4);
+
+          window.__timelines["act-work"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

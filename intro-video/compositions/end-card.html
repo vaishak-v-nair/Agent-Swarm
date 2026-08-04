@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        @font-face {
+          font-family: "Segoe UI Variable Display";
+          src: local("Segoe UI Variable Display"), local("Segoe UI Semibold"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Segoe UI Variable Text";
+          src: local("Segoe UI Variable Text"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Cascadia Mono";
+          src: local("Cascadia Mono"), local("Cascadia Code"), local("Consolas");
+        }
+
+        #root {
+          position: absolute;
+          inset: 0;
+          background: #141519;
+          overflow: hidden;
+          font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        }
+
+        #glow {
+          position: absolute;
+          left: 50%;
+          top: 46%;
+          width: 1800px;
+          height: 1000px;
+          margin: -500px 0 0 -900px;
+          border-radius: 50%;
+          background: radial-gradient(ellipse, rgba(214, 84, 122, 0.13), transparent 62%);
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        #mark {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 214px;
+          text-align: center;
+          font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+          font-weight: 600;
+          font-size: 96px;
+          letter-spacing: -0.035em;
+          color: #d6547a;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        /* The matched element: the proof card's rule extends into this one. */
+        #rule {
+          position: absolute;
+          left: 460px;
+          top: 352px;
+          width: 1000px;
+          height: 2px;
+          overflow: visible;
+        }
+
+        #pill {
+          position: absolute;
+          left: 590px;
+          top: 404px;
+          width: 740px;
+          height: 116px;
+          display: flex;
+          align-items: center;
+          padding: 0 34px;
+          background: #1b1c21;
+          border: 1px solid #282a30;
+          border-radius: 10px;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        #chev {
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 44px;
+          color: #8a8c93;
+          margin-right: 22px;
+        }
+        #cmdwrap {
+          display: inline-flex;
+          align-items: baseline;
+          min-width: 560px;
+          white-space: nowrap;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 44px;
+          color: #d9a05b;
+        }
+        #cur {
+          display: inline-block;
+          width: 15px;
+          height: 44px;
+          background: #d9a05b;
+          margin-left: 5px;
+          transform: translateY(5px);
+        }
+
+        #checks {
+          position: absolute;
+          left: 260px;
+          top: 568px;
+          width: 1400px;
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 14px 44px;
+        }
+        .ck {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 26px;
+          color: #8a8c93;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        .ck i {
+          color: #6fae86;
+          font-style: normal;
+        }
+
+        #closer {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 852px;
+          text-align: center;
+          font-size: 34px;
+          color: #8a8c93;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        #closer .sep {
+          color: #7d7f86;
+          margin: 0 16px;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="end-card"
+        data-width="1920"
+        data-height="1080"
+        data-duration="7"
+      >
+        <div id="glow" data-layout-allow-overflow></div>
+        <div id="mark">agentswarm</div>
+
+        <svg id="rule" viewBox="0 0 1000 2" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path id="rule-path" d="M0 1 H1000" stroke="#343740" stroke-width="2" />
+        </svg>
+
+        <div id="pill">
+          <span id="chev">&rsaquo;</span>
+          <span id="cmdwrap"><span id="typed"></span><span id="cur"></span></span>
+        </div>
+
+        <!-- The seven checks are the real ones, named exactly as doctor.rs
+             emits them. No invented counts. -->
+        <div id="checks">
+          <div class="ck" id="k1"><i>&check;</i>command</div>
+          <div class="ck" id="k2"><i>&check;</i>agents</div>
+          <div class="ck" id="k3"><i>&check;</i>sessions</div>
+          <div class="ck" id="k4"><i>&check;</i>swarms</div>
+          <div class="ck" id="k5"><i>&check;</i>settings</div>
+          <div class="ck" id="k6"><i>&check;</i>git</div>
+          <div class="ck" id="k7"><i>&check;</i>environment</div>
+        </div>
+
+        <div id="closer">open source<span class="sep">&middot;</span>Windows</div>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          var tl = gsap.timeline({ paused: true });
+          var TOTAL = 7;
+
+          tl.fromTo("#glow", { opacity: 0, scale: 0.75 }, { opacity: 1, scale: 1, duration: 0.85, ease: "power2.out" }, 0.05);
+          tl.fromTo("#mark", { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.36, ease: "power4.out" }, 0.15);
+
+          // The rule arrives already drawn from the proof beat, then extends.
+          var LEN = 1000;
+          var path = document.getElementById("rule-path");
+          path.style.strokeDasharray = LEN;
+          path.style.strokeDashoffset = LEN;
+          tl.to(path, { strokeDashoffset: 0, duration: 0.6, ease: "power3.inOut" }, 0.4);
+
+          tl.set("#pill", { opacity: 1 }, 0.75);
+          tl.fromTo("#pill", { scale: 0.94, y: 16 }, { scale: 1, y: 0, duration: 0.38, ease: "back.out(2)" }, 0.75);
+
+          // discrete-text-sequence, smooth-slice variation: plain typing, no
+          // typos — the instrument does not fumble.
+          var CMD = "agentswarm --doctor";
+          var typed = document.getElementById("typed");
+          var len = { v: 0 };
+          tl.to(
+            len,
+            {
+              v: CMD.length,
+              duration: 1.2,
+              ease: "none",
+              onUpdate: function () {
+                typed.textContent = CMD.substring(0, Math.floor(len.v));
+              },
+            },
+            1.05,
+          );
+
+          // Cursor blink — deterministic square wave, never a CSS animation.
+          var cur = document.getElementById("cur");
+          var blink = { p: 0 };
+          tl.to(
+            blink,
+            {
+              p: Math.PI * 2 * Math.floor(TOTAL / 0.62),
+              duration: TOTAL,
+              ease: "none",
+              onUpdate: function () {
+                cur.style.opacity = Math.sin(blink.p) > 0 ? "1" : "0";
+              },
+            },
+            0,
+          );
+
+          // The seven checks report, in the order doctor runs them.
+          ["#k1", "#k2", "#k3", "#k4", "#k5", "#k6", "#k7"].forEach(function (id, i) {
+            var at = 2.5 + i * 0.15;
+            tl.set(id, { opacity: 1, y: 18 }, at);
+            tl.to(id, { y: 0, duration: 0.22, ease: "power4.out" }, at);
+          });
+
+          tl.fromTo("#closer", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.34, ease: "power3.out" }, 4.6);
+
+          window.__timelines["end-card"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

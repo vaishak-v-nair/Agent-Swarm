@@ -6,6 +6,13 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "app"],
       "port": 1420
+    },
+    {
+      "name": "gurutva-page",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3", "-m", "http.server", "8765", "--directory",
+                      "E:/space/gravity-posterior/web"],
+      "port": 8765
     }
   ]
 }

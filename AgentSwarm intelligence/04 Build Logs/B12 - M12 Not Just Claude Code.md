@@ -12,8 +12,7 @@ Code's transcript path itself, and the frontend still checked
 `profile === 'claude'` before attaching — so the headline feature worked for
 exactly one vendor.
 
-This is the first of the three things [[R2 - QM Read In Full|worth stealing from
-QM]]: their harness contract declares capabilities and the core degrades where a
+This is the first of the three things [[R2 - QM Read In Full|worth stealing from QM]]: their harness contract declares capabilities and the core degrades where a
 harness cannot answer.
 
 ## A profile declares its own source

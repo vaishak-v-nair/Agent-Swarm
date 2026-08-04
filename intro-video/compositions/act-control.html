@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        /* OS-bundled faces, declared by name via local() — nothing is fetched
+           at render time. See frame.md. */
+        @font-face {
+          font-family: "Segoe UI Variable Display";
+          src: local("Segoe UI Variable Display"), local("Segoe UI Semibold"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Segoe UI Variable Text";
+          src: local("Segoe UI Variable Text"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Cascadia Mono";
+          src: local("Cascadia Mono"), local("Cascadia Code"), local("Consolas");
+        }
+        #root {
+          position: absolute;
+          inset: 0;
+          background: #141519;
+          overflow: hidden;
+          font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        }
+        .stage {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+        }
+        .zoom-outer {
+          position: absolute;
+          inset: 0;
+          transform-origin: 50% 50%;
+          will-change: transform;
+        }
+        .zoom-inner {
+          position: absolute;
+          inset: 0;
+          will-change: transform;
+        }
+        .win {
+          position: absolute;
+          left: 320px;
+          top: 56px;
+          width: 1280px;
+          height: 848px;
+        }
+        .win video {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 1280px;
+          height: 848px;
+        }
+        .rail {
+          position: absolute;
+          left: 0;
+          top: 904px;
+          width: 1920px;
+          height: 176px;
+          background: #141519;
+        }
+        .rail-line {
+          position: absolute;
+          left: 320px;
+          top: 32px;
+          width: 1280px;
+          height: 1px;
+          background: #282a30;
+        }
+        .callout {
+          position: absolute;
+          left: 320px;
+          top: 62px;
+          width: 1280px;
+          font-size: 40px;
+          font-weight: 600;
+          letter-spacing: -0.005em;
+          color: #d8d6d1;
+          opacity: 0;
+          will-change: transform;
+        }
+        .key {
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 34px;
+          color: #d9a05b;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="act-control"
+        data-width="1920"
+        data-height="1080"
+        data-duration="10.8"
+      >
+        <div class="stage">
+          <!-- Intentional: the push leaks past the frame and .stage clips it. -->
+          <div class="zoom-outer" id="ac-outer" data-layout-allow-overflow>
+            <div class="zoom-inner" id="ac-inner">
+              <div class="win">
+                <!-- Four cuts. The last two are short because the overlays
+                     themselves are short: the palette is on screen 1.5s and the
+                     timeline sheet 2.0s. Measured, not padded. -->
+                <video
+                  id="ac-v1"
+                  src="assets/agentswarm-seekable.mp4"
+                  data-start="0"
+                  data-duration="3.8"
+                  data-media-start="22.2"
+                  data-track-index="0"
+                  muted
+                  playsinline
+                ></video>
+                <video
+                  id="ac-v2"
+                  src="assets/agentswarm-seekable.mp4"
+                  data-start="3.8"
+                  data-duration="2.2"
+                  data-media-start="27.0"
+                  data-track-index="0"
+                  muted
+                  playsinline
+                ></video>
+                <video
+                  id="ac-v3"
+                  src="assets/agentswarm-seekable.mp4"
+                  data-start="6"
+                  data-duration="2.2"
+                  data-media-start="31.6"
+                  data-track-index="0"
+                  muted
+                  playsinline
+                ></video>
+                <video
+                  id="ac-v4"
+                  src="assets/agentswarm-seekable.mp4"
+                  data-start="8.2"
+                  data-duration="2.6"
+                  data-media-start="35.6"
+                  data-track-index="0"
+                  muted
+                  playsinline
+                ></video>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rail" data-layout-allow-caption-zone>
+          <div class="rail-line"></div>
+          <!-- Not "find the error": the recording searches for "agent" and no
+               error is on screen. The callout names the feature, not a claim
+               the frame does not support. -->
+          <div class="callout" id="ac-c1">Find what scrolled past.</div>
+          <div class="callout" id="ac-c2">Every pane at once.</div>
+          <div class="callout" id="ac-c3">
+            <span class="key">ctrl+shift+P</span> — everything.
+          </div>
+          <div class="callout" id="ac-c4">Every session, in the order it happened.</div>
+        </div>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          var tl = gsap.timeline({ paused: true });
+
+          // Same camera contract as act-work, including LAND_Y: the callout
+          // rail owns the bottom 176px, so targets land at 452, not 540.
+          var LAND_Y = 452;
+          function counter(sx, sy, S) {
+            return { x: -(sx - 640), y: -(sy - 484) + (LAND_Y - 540) / S };
+          }
+          function beat(at, dur, sx, sy, from, to) {
+            var c = counter(sx, sy, from);
+            tl.set("#ac-outer", { scale: from }, at);
+            tl.set("#ac-inner", { x: c.x, y: c.y }, at);
+            tl.to("#ac-outer", { scale: to, duration: dur, ease: "none" }, at);
+          }
+
+          // Measured targets, as in act-work.
+          // B1 — find. Holds the box (x 1025-1250, y 100-130) and the pane
+          // it is searching, so the search reads as searching something.
+          // Horizontally centred for the same reason as act-work's B2 — the
+          // find box (x 1025-1250) is well inside the frame either way.
+          beat(0, 3.8, 640, 290, 1.45, 1.5);
+          // B2 — grid. Every pane tiled has to be seen whole.
+          beat(3.8, 2.2, 640, 424, 1.0, 1.04);
+          // B3 — the palette (x 345-935, y 135-556). The tightest push in the
+          // film: 1.75x, because the rows have to be readable.
+          beat(6.0, 2.2, 640, 345, 1.75, 1.8);
+          // B4 — the timeline sheet (x 108-1170, y 80-740). Nearly the whole
+          // window, so the push is modest.
+          beat(8.2, 2.6, 639, 410, 1.35, 1.4);
+
+          function callout(id, at, out) {
+            tl.set(id, { opacity: 1, y: 30 }, at);
+            tl.to(id, { y: 0, duration: 0.2, ease: "power4.out" }, at);
+            tl.set(id, { opacity: 0 }, out);
+          }
+          callout("#ac-c1", 0.3, 3.65);
+          callout("#ac-c2", 3.95, 5.85);
+          callout("#ac-c3", 6.15, 8.05);
+          callout("#ac-c4", 8.35, 10.8);
+
+          window.__timelines["act-control"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

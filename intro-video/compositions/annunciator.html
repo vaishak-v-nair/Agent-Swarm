@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        @font-face {
+          font-family: "Segoe UI Variable Text";
+          src: local("Segoe UI Variable Text"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Cascadia Mono";
+          src: local("Cascadia Mono"), local("Cascadia Code"), local("Consolas");
+        }
+
+        #root {
+          position: absolute;
+          inset: 0;
+          background: #141519;
+          overflow: hidden;
+          font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        }
+
+        #kick {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 258px;
+          text-align: center;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 22px;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: #8a8c93;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        /* center-outward-expansion: the three rows begin stacked at the middle
+           and separate to their marks. The camera never moves; the layout does. */
+        .lamp {
+          position: absolute;
+          left: 360px;
+          width: 1200px;
+          height: 116px;
+          display: flex;
+          align-items: center;
+          padding: 0 34px;
+          background: #1b1c21;
+          border: 1px solid #282a30;
+          border-radius: 10px;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        #l1 {
+          top: 356px;
+        }
+        #l2 {
+          top: 486px;
+        }
+        #l3 {
+          top: 616px;
+        }
+        .bulb {
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          margin-right: 30px;
+          flex: none;
+        }
+        .st {
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 36px;
+          width: 360px;
+          flex: none;
+        }
+        .mn {
+          font-size: 32px;
+          color: #8a8c93;
+        }
+
+        #l1 .bulb {
+          background: #6fae86;
+        }
+        #l1 .st {
+          color: #6fae86;
+        }
+        #l2 {
+          background: #221d16;
+          border-color: #4a3d2c;
+        }
+        #l2 .bulb {
+          background: #d9a05b;
+        }
+        #l2 .st {
+          color: #d9a05b;
+        }
+        #l3 .bulb {
+          background: #55575e;
+        }
+        #l3 .st {
+          color: #8a8c93;
+        }
+
+        /* One halo, one pass, behind the row that asks for you. */
+        #halo {
+          position: absolute;
+          left: 50%;
+          top: 544px;
+          width: 1500px;
+          height: 520px;
+          margin: -260px 0 0 -750px;
+          border-radius: 50%;
+          background: radial-gradient(ellipse, rgba(217, 160, 91, 0.2), transparent 60%);
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="annunciator"
+        data-width="1920"
+        data-height="1080"
+        data-duration="5"
+      >
+        <div id="halo"></div>
+        <div id="kick">the panel reports &middot; it never shouts</div>
+
+        <div class="lamp" id="l1">
+          <span class="bulb"></span><span class="st">running</span
+          ><span class="mn">it is working; leave it alone</span>
+        </div>
+        <div class="lamp" id="l2">
+          <span class="bulb"></span><span class="st">waiting on you</span
+          ><span class="mn">it asked a question and stopped</span>
+        </div>
+        <div class="lamp" id="l3">
+          <span class="bulb"></span><span class="st">idle</span
+          ><span class="mn">nothing pending; not an alarm</span>
+        </div>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          var tl = gsap.timeline({ paused: true });
+
+          tl.fromTo("#kick", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.32, ease: "power3.out" }, 0.1);
+
+          // center-outward-expansion — all three start on the middle row's mark
+          // and travel to their own, so the group resolves rather than arrives.
+          var rows = [
+            ["#l1", 130],
+            ["#l2", 0],
+            ["#l3", -130],
+          ];
+          rows.forEach(function (r, i) {
+            tl.fromTo(
+              r[0],
+              { opacity: 0, y: r[1], scale: 0.94 },
+              { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "power3.out" },
+              0.3 + i * 0.08,
+            );
+          });
+
+          // The amber row asserts once, then holds still.
+          tl.fromTo(
+            "#halo",
+            { opacity: 0, scale: 0.7 },
+            { opacity: 1, scale: 1, duration: 0.55, ease: "power2.out" },
+            1.0,
+          );
+          tl.fromTo("#l2", { scale: 1 }, { scale: 1.035, duration: 0.4, ease: "back.out(2)" }, 1.05);
+          tl.to("#l2", { scale: 1, duration: 0.5, ease: "power2.out", overwrite: "auto" }, 1.48);
+
+          // Exit into the hard cut that opens the proof beat.
+          tl.to(["#l1", "#l3"], { opacity: 0.3, duration: 0.4, ease: "power2.in" }, 4.4);
+          tl.to("#halo", { opacity: 0, duration: 0.4 }, 4.5);
+
+          window.__timelines["annunciator"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

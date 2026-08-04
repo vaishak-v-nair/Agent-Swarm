@@ -89,8 +89,7 @@ M1 terminal · M2 understanding · M3 attention · M4 habits · M5 reach · **M6
 memory with receipts**.
 
 Six milestones. The unproven thing has not moved and cannot be moved by building:
-**four exit tests still need a week of real use.** [[P7 - Baseline Log (fill
-daily)|The baseline week]] started 2026-08-01 and remains the only thing that
+**four exit tests still need a week of real use.** [[P7 - Baseline Log (fill daily)|The baseline week]] started 2026-08-01 and remains the only thing that
 settles them.
 
 See [[B5 - M5 Drive Review Remember]] · [[B4 - M4 It Works For You]] · [[P4 - Milestones]]

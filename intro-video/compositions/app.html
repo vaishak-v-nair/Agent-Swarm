@@ -1,0 +1,964 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        @font-face {
+          font-family: "Segoe UI Variable Display";
+          src: local("Segoe UI Variable Display"), local("Segoe UI Semibold"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Segoe UI Variable Text";
+          src: local("Segoe UI Variable Text"), local("Segoe UI");
+        }
+        @font-face {
+          font-family: "Cascadia Mono";
+          src: local("Cascadia Mono"), local("Cascadia Code"), local("Consolas");
+        }
+
+        /* ------------------------------------------------------------------
+           The AgentSwarm window, rebuilt in HTML from app/src/style.css.
+           Every token is the product's own. It is deliberately NOT a pixel
+           copy: type is enlarged and pane count reduced, because a 1280px UI
+           read at arm's length and a 1920px frame read across a room are
+           different legibility problems. Behaviour shown is behaviour the app
+           actually has — that constraint is in STORYBOARD.md.
+           ------------------------------------------------------------------ */
+        #root {
+          position: absolute;
+          inset: 0;
+          background: #141519;
+          overflow: hidden;
+          font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        }
+
+        #cam {
+          position: absolute;
+          inset: 0;
+          transform-origin: 50% 50%;
+          will-change: transform;
+        }
+        #pan {
+          position: absolute;
+          inset: 0;
+          will-change: transform;
+        }
+        #persp {
+          position: absolute;
+          inset: 0;
+          perspective: 2200px;
+          perspective-origin: 50% 44%;
+        }
+
+        #win {
+          position: absolute;
+          left: 200px;
+          top: 110px;
+          width: 1520px;
+          height: 860px;
+          background: #141519;
+          border: 1px solid #282a30;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow:
+            0 60px 120px rgba(0, 0, 0, 0.55),
+            0 8px 24px rgba(0, 0, 0, 0.4);
+          transform-style: preserve-3d;
+          will-change: transform, opacity;
+        }
+
+        /* ---- top bar (#bar) ---- */
+        #bar {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 1520px;
+          height: 56px;
+          display: flex;
+          align-items: center;
+          gap: 18px;
+          padding: 0 20px;
+          background: #141519;
+          border-bottom: 1px solid #282a30;
+        }
+        .brand {
+          color: #d6547a;
+          font-size: 26px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+        }
+        #muster {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+        }
+        #muster .lamp {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: #343740;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        .spacer {
+          flex: 1;
+        }
+        #hint {
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          color: #969aa1;
+          font-size: 14px;
+          letter-spacing: 0.02em;
+        }
+        #hint b {
+          color: #969aa1;
+          font-weight: 500;
+        }
+        #tally {
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          color: #969aa1;
+          font-size: 14px;
+        }
+
+        /* ---- body: rail + pane ---- */
+        #body {
+          position: absolute;
+          left: 0;
+          top: 56px;
+          width: 1520px;
+          height: 804px;
+          display: flex;
+          gap: 8px;
+          padding: 8px;
+        }
+        #rail {
+          width: 312px;
+          flex: none;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          will-change: transform, opacity;
+        }
+        .rcard {
+          height: 82px;
+          padding: 0 16px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          background: #1b1c21;
+          border: 1px solid #282a30;
+          border-radius: 10px;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 16px;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        .rcard .nm {
+          color: #d8d6d1;
+        }
+        .rcard .id {
+          color: #969aa1;
+        }
+        .rcard .st {
+          margin-left: auto;
+          color: #969aa1;
+        }
+        .rdot {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: #6fae86;
+          flex: none;
+        }
+        .rcard.attn {
+          background: #221d16;
+          border-color: #4a3d2c;
+        }
+        .rcard.attn .rdot {
+          background: #d9a05b;
+        }
+        .rcard.attn .st {
+          color: #d9a05b;
+        }
+
+        #pane {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          background: #1b1c21;
+          border: 1px solid #282a30;
+          border-radius: 10px;
+          overflow: hidden;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        #phead {
+          height: 50px;
+          flex: none;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 0 16px;
+          border-bottom: 1px solid #282a30;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 16px;
+        }
+        #phead .dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: #6fae86;
+        }
+        #phead .nm {
+          color: #d8d6d1;
+        }
+        #phead .id {
+          color: #969aa1;
+        }
+        #phead .st {
+          margin-left: auto;
+          color: #6fae86;
+        }
+        #mode {
+          padding: 4px 12px;
+          border: 1px solid #282a30;
+          border-radius: 6px;
+          color: #969aa1;
+          font-size: 14px;
+          will-change: transform;
+        }
+
+        /* The two readings of one session, stacked for an in-place morph. */
+        .layer {
+          position: absolute;
+          left: 0;
+          top: 50px;
+          width: 100%;
+          height: calc(100% - 50px);
+          padding: 16px 20px;
+          overflow: hidden;
+        }
+        #term {
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 18px;
+          line-height: 1.62;
+          color: #b3b1ac;
+        }
+        #term .p {
+          color: #6fae86;
+        }
+        #term .h {
+          color: #d9a05b;
+        }
+        #term .d {
+          color: #969aa1;
+        }
+        .tline {
+          opacity: 0;
+          white-space: nowrap;
+          will-change: transform, opacity;
+        }
+        #caret {
+          display: inline-block;
+          width: 10px;
+          height: 20px;
+          background: #6fae86;
+          vertical-align: -3px;
+          margin-left: 3px;
+        }
+
+        #flow {
+          opacity: 0;
+          will-change: opacity;
+        }
+        .card {
+          padding: 10px 0 12px 18px;
+          border-left: 2px solid #282a30;
+          margin-bottom: 16px;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        .card .ch {
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 15px;
+          letter-spacing: 0.02em;
+          margin-bottom: 6px;
+        }
+        .card .cb {
+          font-size: 21px;
+          line-height: 1.45;
+          color: #d8d6d1;
+        }
+        .card.tool {
+          border-left-color: #d9a05b;
+        }
+        .card.tool .ch {
+          color: #d9a05b;
+        }
+        .card.tool .cb {
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 17px;
+          color: #b3b1ac;
+        }
+        .card.claude {
+          border-left-color: #7f9dc0;
+        }
+        .card.claude .ch {
+          color: #7f9dc0;
+        }
+        .card.result {
+          border-left-color: #282a30;
+        }
+        .card.result .ch {
+          color: #969aa1;
+        }
+        .card.result .cb {
+          color: #969aa1;
+          font-size: 19px;
+        }
+
+        /* ---- command palette (#palette) ---- */
+        #scrim {
+          position: absolute;
+          inset: 0;
+          background: rgba(10, 11, 13, 0.55);
+          opacity: 0;
+          will-change: opacity;
+        }
+        #palette {
+          position: absolute;
+          left: 430px;
+          top: 190px;
+          width: 660px;
+          background: #1b1c21;
+          border: 1px solid #343740;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6);
+          opacity: 0;
+          transform-origin: 50% 0%;
+          will-change: transform, opacity;
+        }
+        #palq {
+          padding: 18px 20px;
+          border-bottom: 1px solid #282a30;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 18px;
+          color: #969aa1;
+        }
+        .prow {
+          display: flex;
+          align-items: center;
+          padding: 13px 20px;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 17px;
+          color: #d8d6d1;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        .prow .k {
+          margin-left: auto;
+          color: #969aa1;
+          font-size: 15px;
+        }
+        .prow .sub {
+          color: #969aa1;
+          margin-left: 12px;
+        }
+        .prow.on {
+          background: #212228;
+        }
+
+        /* ---- timeline sheet (#timeline) ---- */
+        #sheet {
+          position: absolute;
+          left: 90px;
+          top: 120px;
+          width: 1340px;
+          height: 660px;
+          background: #1b1c21;
+          border: 1px solid #343740;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 40px 90px rgba(0, 0, 0, 0.62);
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        #shead {
+          height: 52px;
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          padding: 0 22px;
+          border-bottom: 1px solid #282a30;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 16px;
+          color: #969aa1;
+        }
+        #shead b {
+          color: #d8d6d1;
+          font-weight: 500;
+        }
+        #srows {
+          padding: 8px 0;
+          will-change: transform;
+        }
+        .srow {
+          display: flex;
+          gap: 22px;
+          align-items: baseline;
+          padding: 9px 22px;
+          font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+          font-size: 16px;
+          opacity: 0;
+          white-space: nowrap;
+          will-change: transform, opacity;
+        }
+        .srow .ts {
+          color: #969aa1;
+          width: 60px;
+          flex: none;
+        }
+        .srow .pn {
+          color: #969aa1;
+          width: 105px;
+          flex: none;
+        }
+        .srow .ev {
+          width: 96px;
+          flex: none;
+        }
+        .srow .tx {
+          color: #b3b1ac;
+          overflow: hidden;
+        }
+        .srow.claude .ev {
+          color: #7f9dc0;
+        }
+        .srow.tool .ev {
+          color: #d9a05b;
+        }
+        .srow.res .ev {
+          color: #969aa1;
+        }
+
+        /* ---- driven cursor (cursor-click-ripple) ---- */
+        #cur {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 26px;
+          height: 26px;
+          opacity: 0;
+          z-index: 60;
+          will-change: transform, opacity;
+        }
+        #cur svg {
+          display: block;
+        }
+        #ripple {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 44px;
+          height: 44px;
+          margin: -9px 0 0 -9px;
+          border-radius: 50%;
+          border: 2px solid #7f9dc0;
+          opacity: 0;
+          z-index: 59;
+          will-change: transform, opacity;
+        }
+
+        /* ---- the callout: what v1 was missing entirely ----
+           A caption in a detached rail names nothing. This box lands ON the
+           element being talked about and draws a leader line to its label, so
+           the camera move has a subject. */
+        #spot {
+          position: absolute;
+          border: 2px solid #d9a05b;
+          border-radius: 8px;
+          opacity: 0;
+          z-index: 55;
+          will-change: transform, opacity;
+        }
+        #lead {
+          position: absolute;
+          z-index: 55;
+          overflow: visible;
+        }
+        #label {
+          position: absolute;
+          padding: 10px 18px;
+          background: #d9a05b;
+          border-radius: 8px;
+          color: #17140f;
+          font-size: 24px;
+          font-weight: 600;
+          white-space: nowrap;
+          opacity: 0;
+          z-index: 56;
+          will-change: transform, opacity;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="app"
+        data-width="1920"
+        data-height="1080"
+        data-duration="22"
+      >
+        <div id="cam" data-layout-allow-overflow>
+          <div id="pan">
+            <div id="persp">
+              <div id="win">
+                <div id="bar">
+                  <span class="brand">agentswarm</span>
+                  <span id="muster">
+                    <span class="lamp" id="lp1"></span><span class="lamp" id="lp2"></span
+                    ><span class="lamp" id="lp3"></span><span class="lamp" id="lp4"></span
+                    ><span class="lamp" id="lp5"></span>
+                  </span>
+                  <span class="spacer"></span>
+                  <span id="hint"
+                    ><b>ctrl+shift+P</b> everything &nbsp; <b>M</b> timeline &nbsp; <b>D</b>
+                    changes &nbsp; <b>F</b> search</span
+                  >
+                  <span id="tally">5 running</span>
+                </div>
+
+                <div id="body">
+                  <div id="rail">
+                    <div class="rcard" id="rc1">
+                      <span class="rdot"></span><span class="nm">claude</span
+                      ><span class="id">#1</span><span class="st">2m 14s</span>
+                    </div>
+                    <div class="rcard" id="rc2">
+                      <span class="rdot"></span><span class="nm">shell</span
+                      ><span class="id">#2</span><span class="st">idle</span>
+                    </div>
+                    <div class="rcard attn" id="rc3">
+                      <span class="rdot"></span><span class="nm">claude</span
+                      ><span class="id">#3</span><span class="st">waiting</span>
+                    </div>
+                  </div>
+
+                  <div id="pane">
+                    <div id="phead">
+                      <span class="dot"></span><span class="nm">claude</span
+                      ><span class="id">#1</span><span id="mode">raw</span
+                      ><span class="st">working</span>
+                    </div>
+
+                    <div class="layer" id="term">
+                      <div class="tline" id="tl0">
+                        <span class="p">&rsaquo;</span> <span id="typed"></span
+                        ><span id="caret"></span>
+                      </div>
+                      <div class="tline" id="tl1">
+                        <span class="h">47dcbba</span> B13 + NEXT SESSION: the vault holds
+                        everything
+                      </div>
+                      <div class="tline" id="tl2">
+                        <span class="h">7734028</span> The intro, recut like an editor
+                      </div>
+                      <div class="tline" id="tl3">
+                        <span class="h">17e339f</span> The intro, remade in the reference's grammar
+                      </div>
+                      <div class="tline" id="tl4">
+                        <span class="h">c3a082c</span> Publish readiness: dialogs, site, video
+                      </div>
+                      <div class="tline" id="tl5">
+                        <span class="h">d942b1b</span> The terminal basics: copy, find, pin
+                      </div>
+                      <div class="tline" id="tl6">&nbsp;</div>
+                      <div class="tline" id="tl7">
+                        <span class="p">&rsaquo;</span> npm test --prefix app
+                      </div>
+                      <div class="tline" id="tl8">
+                        <span class="d">PASS</span> app/test/semantic.test.js
+                      </div>
+                      <div class="tline" id="tl9">
+                        <span class="d">PASS</span> app/test/recipes.test.js
+                      </div>
+                      <div class="tline" id="tl10">
+                        <span class="d">PASS</span> app/test/settings.test.js
+                      </div>
+                      <div class="tline" id="tl11">
+                        <span class="d">PASS</span> app/test/peek.test.js
+                      </div>
+                      <div class="tline" id="tl12">&nbsp;</div>
+                      <div class="tline" id="tl13">
+                        <span class="d">28 passed · 0 failed · 174 ms</span>
+                      </div>
+                    </div>
+
+                    <div class="layer" id="flow">
+                      <div class="card tool" id="cd1">
+                        <div class="ch">Bash</div>
+                        <div class="cb">npm test --prefix app</div>
+                      </div>
+                      <div class="card claude" id="cd2">
+                        <div class="ch">claude</div>
+                        <div class="cb">
+                          All harness checks pass: two panes share the stage, and the settings
+                          sheet saves real edits.
+                        </div>
+                      </div>
+                      <div class="card result" id="cd3">
+                        <div class="ch">result</div>
+                        <div class="cb">28 passed · 0 failed · 174 ms</div>
+                      </div>
+                      <div class="card claude" id="cd4">
+                        <div class="ch">claude</div>
+                        <div class="cb">
+                          The window froze once, right around the pin beat. Job Object now
+                          reaps every child, so nothing is orphaned when the app exits.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="scrim"></div>
+
+                <div id="palette" data-layout-allow-overlap>
+                  <div id="palq">run a swarm, open a pane, find anything…</div>
+                  <div class="prow on" id="pr1">
+                    swarm<span class="sub">morning</span><span class="k">the daily two</span>
+                  </div>
+                  <div class="prow" id="pr2">
+                    swarm<span class="sub">review</span
+                    ><span class="k">a reviewer that cannot edit</span>
+                  </div>
+                  <div class="prow" id="pr3">
+                    new pane<span class="sub">claude</span><span class="k">ctrl+shift+T</span>
+                  </div>
+                  <div class="prow" id="pr4">
+                    changes<span class="sub">what actually changed on disk</span
+                    ><span class="k">ctrl+shift+D</span>
+                  </div>
+                  <div class="prow" id="pr5">
+                    search<span class="sub">everything ever said here</span
+                    ><span class="k">ctrl+shift+F</span>
+                  </div>
+                  <div class="prow" id="pr6">
+                    save this swarm<span class="k">3 panes open</span>
+                  </div>
+                </div>
+
+                <div id="sheet" data-layout-allow-overlap>
+                  <div id="shead"><b>timeline</b><span>all sessions</span></div>
+                  <div id="srows">
+                    <div class="srow tool" id="sr1">
+                      <span class="ts">16:38</span><span class="pn">#1 claude</span
+                      ><span class="ev">Bash</span
+                      ><span class="tx">npm run verified</span>
+                    </div>
+                    <div class="srow res" id="sr2">
+                      <span class="ts">16:39</span><span class="pn">#1 claude</span
+                      ><span class="ev">result</span
+                      ><span class="tx">37 Rust · 28 JS · smoke on the real binary</span>
+                    </div>
+                    <div class="srow claude" id="sr3">
+                      <span class="ts">16:40</span><span class="pn">#1 claude</span
+                      ><span class="ev">claude</span
+                      ><span class="tx">Find and paste verified. Now pin and the settings sheet.</span>
+                    </div>
+                    <div class="srow tool" id="sr4">
+                      <span class="ts">16:47</span><span class="pn">#2 shell</span
+                      ><span class="ev">Bash</span
+                      ><span class="tx">scripts/smoke.ps1</span>
+                    </div>
+                    <div class="srow res" id="sr5">
+                      <span class="ts">16:48</span><span class="pn">#2 shell</span
+                      ><span class="ev">result</span
+                      ><span class="tx">ok command · ok agents · ok sessions · ok git</span>
+                    </div>
+                    <div class="srow claude" id="sr6">
+                      <span class="ts">16:50</span><span class="pn">#3 claude</span
+                      ><span class="ev">claude</span
+                      ><span class="tx">The webview died mid-demo, right around the pin beat.</span>
+                    </div>
+                    <div class="srow tool" id="sr7">
+                      <span class="ts">16:51</span><span class="pn">#3 claude</span
+                      ><span class="ev">Edit</span><span class="tx">app/src/main.js</span>
+                    </div>
+                    <div class="srow res" id="sr8">
+                      <span class="ts">16:57</span><span class="pn">#3 claude</span
+                      ><span class="ev">result</span
+                      ><span class="tx">release profile [optimized] in 5m 48s</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="spot"></div>
+                <svg id="lead" width="1520" height="860" fill="none">
+                  <path id="lead-path" d="M0 0 H0" stroke="#d9a05b" stroke-width="2" />
+                </svg>
+                <div id="label"></div>
+
+                <div id="ripple"></div>
+                <div id="cur">
+                  <svg width="26" height="26" viewBox="0 0 26 26">
+                    <path
+                      d="M3 2 L3 20 L8 15.5 L11.5 23 L14.5 21.5 L11 14.5 L18 14.5 Z"
+                      fill="#f2f0ec"
+                      stroke="#141519"
+                      stroke-width="1.4"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          var tl = gsap.timeline({ paused: true });
+
+          /* Camera. Nested wrappers: #cam scales, #pan counter-translates, so
+             the counter-translate is T = -offset and does not depend on scale
+             (coordinate-target-zoom). Targets are canvas coordinates, which we
+             own outright now that the UI is ours. */
+          function look(at, dur, cx, cy, from, to, ease) {
+            tl.to("#cam", { scale: to, duration: dur, ease: ease || "power3.inOut" }, at);
+            tl.to(
+              "#pan",
+              { x: -(cx - 960), y: -(cy - 540), duration: dur, ease: ease || "power3.inOut" },
+              at,
+            );
+            if (from != null) tl.set("#cam", { scale: from }, at);
+          }
+          function place(cx, cy, s) {
+            tl.set("#cam", { scale: s }, 0);
+            tl.set("#pan", { x: -(cx - 960), y: -(cy - 540) }, 0);
+          }
+
+          // Open already pushed in, continuing the wordmark's zoom-through.
+          place(960, 540, 1.3);
+
+          /* ===== P1 — the cockpit (0 → 6.5) ============================== */
+          // 3d-camera-flight: the window arrives tilted and flattens.
+          tl.fromTo(
+            "#win",
+            { opacity: 0, rotationX: 15, rotationY: -13, z: -420, y: 60 },
+            {
+              opacity: 1,
+              rotationX: 0,
+              rotationY: 0,
+              z: 0,
+              y: 0,
+              duration: 1.0,
+              ease: "power3.out",
+            },
+            0,
+          );
+          tl.to("#cam", { scale: 1, duration: 1.0, ease: "power3.out" }, 0);
+
+          // Rail slides in, then the pane.
+          tl.fromTo("#rail", { opacity: 0, x: -70 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 0.55);
+          ["#rc1", "#rc2", "#rc3"].forEach(function (id, i) {
+            tl.fromTo(
+              id,
+              { opacity: 0, x: -40 },
+              { opacity: 1, x: 0, duration: 0.42, ease: "power4.out" },
+              0.62 + i * 0.085,
+            );
+          });
+          tl.fromTo("#pane", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.52, ease: "power3.out" }, 0.8);
+
+          // The muster lamps light one at a time — the product's real answer
+          // to "which one". Four green, then the amber one.
+          var lamps = ["#lp1", "#lp2", "#lp3", "#lp4", "#lp5"];
+          lamps.forEach(function (id, i) {
+            var at = 1.3 + i * 0.115;
+            tl.fromTo(
+              id,
+              { opacity: 0, scale: 0.3 },
+              { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(3)" },
+              at,
+            );
+            tl.set(id, { backgroundColor: i === 4 ? "#d9a05b" : "#6fae86" }, at);
+          });
+
+          // Terminal history is already there; the session did not start now.
+          ["#tl1", "#tl2", "#tl3", "#tl4", "#tl5", "#tl6", "#tl7"].forEach(function (id, i) {
+            tl.set(id, { opacity: 0.45 }, 1.05 + i * 0.035);
+          });
+
+          /* ===== P2 — send work (6.5 → 13.0) ============================= */
+          look(4.5, 0.85, 900, 420, null, 1.42);
+          // depth-of-field-blur: everything that is not the pane recedes.
+          tl.to("#rail", { filter: "blur(4px)", opacity: 0.45, duration: 0.6 }, 4.6);
+
+          // Cursor arrives and clicks into the pane (cursor-click-ripple).
+          tl.set("#cur", { x: 1500, y: 900, opacity: 0 }, 4.5);
+          tl.to("#cur", { opacity: 1, duration: 0.2 }, 4.65);
+          tl.to("#cur", { x: 700, y: 250, duration: 0.62, ease: "power2.inOut" }, 4.7);
+          tl.set("#ripple", { x: 700, y: 250 }, 5.35);
+          tl.fromTo(
+            "#ripple",
+            { opacity: 0.85, scale: 0.3 },
+            { opacity: 0, scale: 2.2, duration: 0.5, ease: "power2.out" },
+            5.35,
+          );
+          tl.to("#cur", { opacity: 0, duration: 0.22 }, 5.6);
+
+          // The command types. Smooth slice — the instrument does not fumble.
+          tl.set("#tl0", { opacity: 1 }, 5.5);
+          var CMD = "git log --oneline -5";
+          var typed = document.getElementById("typed");
+          var len = { v: 0 };
+          tl.to(
+            len,
+            {
+              v: CMD.length,
+              duration: 0.85,
+              ease: "none",
+              onUpdate: function () {
+                typed.textContent = CMD.substring(0, Math.floor(len.v));
+              },
+            },
+            5.55,
+          );
+          // Caret blink: deterministic square wave off the timeline clock.
+          var caret = document.getElementById("caret");
+          var blink = { p: 0 };
+          tl.to(
+            blink,
+            {
+              p: Math.PI * 2 * 30,
+              duration: 16,
+              ease: "none",
+              onUpdate: function () {
+                caret.style.opacity = Math.sin(blink.p) > 0 ? "1" : "0";
+              },
+            },
+            5.3,
+          );
+
+          // Output lands as a wave, brightening the history behind it.
+          ["#tl1","#tl2","#tl3","#tl4","#tl5","#tl6","#tl7","#tl8","#tl9","#tl10","#tl11","#tl12","#tl13"].forEach(function (id, i) {
+            var at = 6.6 + i * 0.055;
+            tl.set(id, { opacity: 1, y: 16 }, at);
+            tl.to(id, { y: 0, duration: 0.2, ease: "power4.out" }, at);
+          });
+
+          // The callout lands ON the output, with a leader line to its label.
+          var lp = document.getElementById("lead-path");
+          tl.set("#spot", { left: 330, top: 130, width: 700, height: 250 }, 7.5);
+          tl.fromTo(
+            "#spot",
+            { opacity: 0, scale: 1.06 },
+            { opacity: 1, scale: 1, duration: 0.36, ease: "power3.out" },
+            7.5,
+          );
+          tl.set(lp, { attr: { d: "M1030 200 H1210" } }, 7.5);
+          lp.style.strokeDasharray = 180;
+          lp.style.strokeDashoffset = 180;
+          tl.to(lp, { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 7.72);
+          tl.set("#label", { left: 1216, top: 176 }, 7.9);
+          document.getElementById("label").textContent = "no keyboard";
+          tl.fromTo(
+            "#label",
+            { opacity: 0, x: -18 },
+            { opacity: 1, x: 0, duration: 0.26, ease: "power4.out" },
+            7.9,
+          );
+          tl.to(["#spot", "#label"], { opacity: 0, duration: 0.3 }, 9.6);
+          tl.to(lp, { strokeDashoffset: 180, duration: 0.26 }, 9.6);
+
+          /* ===== P3 — plain english (13.0 → 19.5) ======================== */
+          // theme-crossfade-morph under a fixed anchor: the pane header never
+          // moves, so the two readings are the same session, not two screens.
+          tl.to("#mode", { color: "#7f9dc0", borderColor: "#7f9dc0", duration: 0.22 }, 10.2);
+          tl.fromTo("#mode", { scale: 1 }, { scale: 1.1, duration: 0.18, ease: "back.out(3)" }, 10.2);
+          tl.to("#mode", { scale: 1, duration: 0.22, overwrite: "auto" }, 10.4);
+          tl.call(
+            function () {
+              document.getElementById("mode").textContent = "plain english";
+            },
+            null,
+            10.3,
+          );
+
+          tl.to("#term", { opacity: 0, duration: 0.38, ease: "power2.inOut" }, 10.3);
+          tl.set("#flow", { opacity: 1 }, 10.55);
+          ["#cd1", "#cd2", "#cd3", "#cd4"].forEach(function (id, i) {
+            var at = 10.7 + i * 0.17;
+            tl.fromTo(
+              id,
+              { opacity: 0, y: 30 },
+              { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" },
+              at,
+            );
+          });
+          // A slow push while it is read — motivated, monotonic, not a loop.
+          look(11.2, 3.0, 960, 430, null, 1.3, "none");
+
+          /* ===== P4 — the palette (19.5 → 24.5) ========================== */
+          look(15.2, 0.7, 960, 525, null, 1.7);
+          tl.to("#flow", { opacity: 0.25, filter: "blur(5px)", duration: 0.4 }, 15.3);
+          tl.to("#scrim", { opacity: 1, duration: 0.32 }, 15.3);
+          tl.to("#rail", { opacity: 0.2, duration: 0.32, overwrite: "auto" }, 15.3);
+
+          // anchored-layout-expand: a pill springs open into the panel.
+          tl.fromTo(
+            "#palette",
+            { opacity: 0, scaleY: 0.12, scaleX: 0.55, y: -10 },
+            { opacity: 1, scaleY: 1, scaleX: 1, y: 0, duration: 0.42, ease: "back.out(1.5)" },
+            15.5,
+          );
+          ["#pr1", "#pr2", "#pr3", "#pr4", "#pr5", "#pr6"].forEach(function (id, i) {
+            var at = 15.75 + i * 0.05;
+            tl.set(id, { opacity: 1, y: 14 }, at);
+            tl.to(id, { y: 0, duration: 0.22, ease: "power4.out" }, at);
+          });
+          // Selection steps down the list — the keyboard driving, not a mouse.
+          tl.set("#pr1", { backgroundColor: "#1b1c21" }, 16.7);
+          tl.set("#pr4", { backgroundColor: "#212228" }, 16.7);
+          tl.set("#pr4", { backgroundColor: "#1b1c21" }, 17.3);
+          tl.set("#pr5", { backgroundColor: "#212228" }, 17.3);
+
+          /* ===== P5 — the timeline (24.5 → 29.5) ========================= */
+          tl.to(
+            "#palette",
+            { opacity: 0, scaleY: 0.2, y: -14, duration: 0.3, ease: "power2.in" },
+            18.6,
+          );
+          look(18.8, 0.72, 960, 560, null, 1.28);
+          tl.fromTo(
+            "#sheet",
+            { opacity: 0, y: 220 },
+            { opacity: 1, y: 0, duration: 0.52, ease: "power3.out" },
+            18.85,
+          );
+          var srows = ["#sr1", "#sr2", "#sr3", "#sr4", "#sr5", "#sr6", "#sr7", "#sr8"];
+          srows.forEach(function (id, i) {
+            var at = 19.2 + i * 0.055;
+            tl.set(id, { opacity: 1, y: 18 }, at);
+            tl.to(id, { y: 0, duration: 0.24, ease: "power4.out" }, at);
+          });
+          // nudge-curve: the sheet scrolls once, slow-fast-slow.
+          tl.to("#srows", { y: -110, duration: 1.3, ease: "power2.inOut" }, 19.9);
+
+          // Exit: pull back out of the window for the diagram that follows.
+          tl.to("#cam", { scale: 0.86, duration: 0.85, ease: "power2.inOut" }, 21.1);
+          tl.to("#win", { opacity: 0, duration: 0.6, ease: "power2.in" }, 21.35);
+          tl.to("#scrim", { opacity: 0, duration: 0.42 }, 21.2);
+
+          window.__timelines["app"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>
