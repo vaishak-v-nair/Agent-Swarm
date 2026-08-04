@@ -16,4 +16,5 @@
 - [Recall providers + MCP](recall-providers-and-mcp.md) — ollama is free; the claude CLI (NOT the API key) spends the subscription; MCP bridge live
 - [AgentSwarm dataset](agentswarm-dataset.md) — 416k rows, one schema, load.py only; RAG baseline recall@1 0.892 that embeddings must beat; CPU wall at 0.27s/row/epoch
 - [Everything lives on E:](everything-lives-on-e-drive.md) — Recall moved inside agent-swarm; RECALL_HOME; what can't move and why
+- [Never pipe a long job through tail](never-pipe-a-long-job-through-tail.md) — empty log, exit 0 after being killed, 90 min of stolen CPU that contaminated every timing
 - [Open the file](a-schema-description-is-not-the-schema.md) — I called RAGTruth span-less by reading a feature list; verify against bytes, not docs

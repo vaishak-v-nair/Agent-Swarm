@@ -179,14 +179,28 @@ SQuAD 2.0 answerability sit near 0.85–0.90 with full fine-tuning of a larger
 model on a GPU. One GPU session would settle whether this approach reaches that;
 nothing here says it will.
 
-### The CPU constraint, stated plainly
+### The CPU constraint — and why the timings below are upper bounds
 
-This machine has **no CUDA**. Measured throughput: **0.27 s per row per epoch**
-at `max_len 160`, so a 24k × 2-epoch run is **~3.5 hours**. That is why
-`--freeze` exists — freezing the embedding table and lower encoder layers cuts
-the backward pass to the layers that actually adapt, since answerability is
-decided in the upper layers where question and context tokens attend to each
-other.
+This machine has **no CUDA**. That is why `--freeze` exists: freezing the
+embedding table and lower encoder layers cuts the backward pass to the layers
+that actually adapt, since answerability is decided in the upper layers where
+question and context tokens attend to each other.
+
+**Every wall-clock figure recorded here is contaminated and should be read as an
+upper bound.** A second, larger training run was left running unnoticed and
+competed for the same cores throughout — including during the 2,000-row
+calibration that produced the "0.27 s/row/epoch" figure and during the 74-minute
+run below. Single-job throughput is faster, by an amount that was never
+measured. The *accuracy* numbers are unaffected — contention changes speed, not
+gradients — but any capacity planning based on these timings will be
+pessimistic.
+
+How it went unnoticed is worth recording: that run was piped through
+`… | tail -60`, which buffers all output until the process ends **and** returns
+its own exit status. So a job that was killed at step 500 of 1500 reported
+"completed, exit code 0" and showed an empty log the entire time it was
+running. **Do not pipe a long-running job through `tail`** — the progress you
+need is suppressed and a death is disguised as success.
 
 A run of 2,000 rows × 1 epoch **collapsed to a single class** (abstain
 precision 0.0). Undertrained, and recorded rather than hidden — it is the

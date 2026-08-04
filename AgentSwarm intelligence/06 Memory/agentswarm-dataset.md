@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 9162a494-02c3-49ab-846a-4c3f8804c34d
-  modified: 2026-08-04T10:22:51.496Z
+  modified: 2026-08-04T10:30:02.666Z
 ---
 
 **`E:\agent-swarm\recall\datasets\agentswarm\`** — 416,174 rows, built
@@ -72,9 +72,13 @@ half that fails, and a millisecond CPU classifier can gate the expensive model.
   (0.6663 -> 0.4676) on 12k of 142k available rows. Published SQuAD 2.0
   answerability sits ~0.85-0.90 with full fine-tuning on GPU. Not deployable
   yet, and the limit is compute, not method.
-- **No CUDA on this machine.** Measured **0.27 s/row/epoch** at max_len 160 →
-  a 24k x 2 run is ~3.5 hours. Hence `--freeze`, which trains only the upper
+- **No CUDA on this machine.** Hence `--freeze`, which trains only the upper
   layers (7.2M of 22.7M params).
+- **All wall-clock figures here are UPPER BOUNDS, not measurements.** A second
+  training run was competing for the same cores throughout, unnoticed — so the
+  "0.27 s/row/epoch" and "74 minutes" numbers are inflated by an unmeasured
+  margin. Accuracy is unaffected (contention changes speed, not gradients).
+  See [[never-pipe-a-long-job-through-tail]].
 - 2,000 rows x 1 epoch **collapsed to one class**. Undertrained; kept as the
   evidence for why freezing + more data was needed.
 - **transformers 5.x dropped slow->fast tokenizer conversion**, so

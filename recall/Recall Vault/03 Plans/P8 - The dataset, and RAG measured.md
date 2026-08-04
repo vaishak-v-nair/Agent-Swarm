@@ -99,9 +99,25 @@ That is a finding, not a failure. SQuAD v2's unanswerable questions are
 to grab. It also sets a real bar: anything above 50% is learning something about
 the question–context relationship rather than surface statistics.
 
-**The wall: no CUDA on this machine.** Measured **0.27 s per row per epoch** at
-`max_len 160`, so a 24k × 2-epoch run is **~3.5 hours** of CPU. Measured from a
-completed run, not estimated.
+**The wall: no CUDA on this machine.** A 2,000-row run measured 0.27 s per row
+per epoch, implying ~3.5 hours for a 24k × 2 run.
+
+**That figure is contaminated, and so is every wall-clock number in this note.**
+A second, larger training run was left going unnoticed and competed for the same
+cores throughout — during the calibration run *and* during the 74-minute run
+below. Real single-job throughput is faster by an unmeasured margin. Treat all
+timings here as **upper bounds**. Accuracy is unaffected: contention changes
+speed, not gradients.
+
+The way it hid is the part worth keeping. That run was piped through
+`… | tail -60`, which buffers everything until the process exits **and** returns
+`tail`'s exit status rather than the job's. So a process killed at step 500 of
+1500 reported *"completed, exit code 0"* with an empty log — and I had already
+looked at that empty log, guessed the job was dead, and moved on while it
+carried on eating half the CPU for ninety minutes.
+
+**Never pipe a long-running job through `tail`.** It suppresses the progress you
+need and disguises a death as a success.
 
 Two things came out of hitting it:
 

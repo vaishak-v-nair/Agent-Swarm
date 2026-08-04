@@ -92,8 +92,14 @@ model so you only pay for candidates that survive.
 - **Undertrained, not converged** — loss still falling at the last step
   (0.6663 → 0.4676) on 12k of 142k rows. Published SQuAD 2.0 answerability is
   ~0.85–0.90 with full fine-tuning on GPU. **The limit is compute, not method.**
-- **No CUDA on this machine.** Measured **0.27 s/row/epoch** → a 24k × 2 run is
-  ~3.5 hours. Hence `--freeze`, training only the upper layers (7.2M of 22.7M).
+- **No CUDA.** Hence `--freeze`, training only the upper layers (7.2M of 22.7M).
+- **Every wall-clock figure recorded is an UPPER BOUND, not a measurement.** A
+  second training run competed for the same cores unnoticed for 90 minutes, so
+  "0.27 s/row/epoch" and "74 minutes" are inflated by an unmeasured margin.
+  Accuracy is unaffected — contention changes speed, not gradients.
+- **Never pipe a long-running job through `tail`.** It buffers all output and
+  returns `tail`'s exit code, so a process killed at step 500/1500 reported
+  "completed, exit 0" with an empty log.
 - A 2k × 1 run **collapsed to one class**. Kept as evidence, not hidden.
 - `prajjwal1/bert-tiny` **will not load** — transformers 5.x dropped slow→fast
   tokenizer conversion. Default is `all-MiniLM-L6-v2`.
