@@ -1,0 +1,25 @@
+{
+  "_method": "Each query was written by reading the card and asking: how would someone ask for this WITHOUT the card's distinctive vocabulary? That is the semantic-gap hypothesis under test (P9 Lever 4). Queries that share the card's key nouns would test keyword recall, which BM25 already won on the public dataset.",
+  "queries": [
+    { "gold": "3dd71962", "query": "why does my child process hang forever waiting even though I passed data to it" },
+    { "gold": "99fc17fb", "query": "multiline text passed as a command argument gets garbled on windows" },
+    { "gold": "b0f0a039", "query": "two strings look identical on screen but the comparison says they differ" },
+    { "gold": "2c4a34c4", "query": "scrubbing the exported mp4 jumps to the wrong place" },
+    { "gold": "51c502e4", "query": "generating background audio locally takes forever without a graphics card" },
+    { "gold": "8c3a228c", "query": "the typeface in the final export does not match what the browser showed" },
+    { "gold": "224222de", "query": "a try block with a fallback value hid a real bug from us" },
+    { "gold": "cc85938e", "query": "every run produces exactly the same wrong number" },
+    { "gold": "7d35fbb8", "query": "the backup provider is always slow right at the moment we cut over to it" },
+    { "gold": "d36f754b", "query": "can we pull songs from the free stock media service through its api" },
+    { "gold": "e3d79460", "query": "do we have to credit the photographer when using images from the free photo site" },
+    { "gold": "6f346e69", "query": "where did we decide client uploads live and how do reviewers approve them" },
+    { "gold": "0f51113b", "query": "how long does the social platform take to approve automated posting" },
+    { "gold": "269a7321", "query": "does a hash appearing in the transcript prove that session authored the change" },
+    { "gold": "d9fde6fe", "query": "pattern matching alone misses a huge share of what we want to extract" },
+    { "gold": "bc98df5d", "query": "random permission errors renaming things on my machine that pass on ci" },
+    { "gold": "cd455955", "query": "the assistant claimed the suite passed but never actually ran anything" },
+    { "gold": "33c2bfda", "query": "renaming the field did not fix rows that were written before the change" },
+    { "gold": "1e743314", "query": "should the promo follow the product's strict no-animation principle" },
+    { "gold": "6eb30e6c", "query": "the npx setup step dies immediately on a windows laptop" }
+  ]
+}

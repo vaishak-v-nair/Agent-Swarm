@@ -282,12 +282,60 @@ def load_ragtruth_labeled(b, cap):
             )
 
 
+def load_flywheel(b, cap):
+    """Our own exhaust (P9 Lever 1): every judgment `recall index` makes.
+
+    Written by recall/src/flywheel.js as append-only JSONL beside the store,
+    redacted before it ever hits disk. The public sources taught the task
+    shape; these rows carry OUR distribution — real transcripts, real tool
+    output, real developer vocabulary — which no public dataset has.
+
+    The judge answers a fixed implicit question, so `question` is constant
+    here; the gate this trains is "does this candidate contain an extractable
+    span at all", which is exactly the pre-filter's job.
+    """
+    path_ = os.environ.get("RECALL_FLYWHEEL") or os.path.join(
+        os.path.dirname(OUT), "..", ".store", "flywheel.jsonl")
+    if not os.path.exists(path_):
+        return
+    QUESTION = ("Which exact span records a durable engineering fact — "
+                "a gotcha, decision, solution, or failed approach?")
+    with open(path_, encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            if i >= cap:
+                break
+            try:
+                r = json.loads(line)
+            except ValueError:
+                b.dropped["recall:bad_json"] += 1
+                continue
+            ctx = r.get("context") or ""
+            if r.get("trigger"):
+                ctx = f"{ctx}\n\n[tool output]\n{r['trigger']}"
+            accepted = bool(r.get("accepted"))
+            b.add(
+                "recall", "extract", "train",
+                ctx, QUESTION,
+                (r.get("quote") or "") if accepted else "",
+                accepted,
+                "answerable" if r.get("accepted") else "unanswerable",
+                meta={"model": r.get("model"),
+                      "promptVersion": r.get("promptVersion"),
+                      "sessionId": r.get("sessionId"),
+                      "messageUuid": r.get("messageUuid"),
+                      "generator": r.get("generator"),
+                      "reason": r.get("reason"),
+                      "humanVerdict": r.get("humanVerdict")},
+            )
+
+
 LOADERS = {
     "squad_v2": load_squad,
     "fever": load_fever,
     "halueval_qa": load_halueval,
     "ragtruth": load_ragtruth,
     "ragtruth_labeled": load_ragtruth_labeled,
+    "recall": load_flywheel,
 }
 
 

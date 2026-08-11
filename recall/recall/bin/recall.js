@@ -18,6 +18,7 @@ import {
 } from '../../recall-core/src/index.js';
 import { candidatesFrom, toPrompt } from '../src/candidates.js';
 import { judgeBatch, PROMPT_VERSION, JUDGE_SCHEMA } from '../src/judge.js';
+import { recordJudgments } from '../src/flywheel.js';
 import { resolveClient, readConfig, writeConfig, PRESETS, listOllamaModels, ollamaUp, CONFIG_PATH, judgeCapability } from '../src/providers.js';
 import { openStore, defaultStorePath } from '../src/store.js';
 import { answer } from '../src/answer.js';
@@ -150,9 +151,18 @@ if (cmd === 'index') {
     let cards = [], rejected = [];
 
     for (let i = 0; i < cands.length; i += batch) {
-      const out = await judgeBatch(cands.slice(i, i + batch), client, { toPrompt });
+      const slice = cands.slice(i, i + batch);
+      const out = await judgeBatch(slice, client, { toPrompt });
       cards.push(...out.cards);
       rejected.push(...out.rejected, ...out.errors);
+      // The flywheel (P9 Lever 1): every judgment is a labeled training row.
+      // Written per BATCH, not per session — an append-only log that flushes
+      // only on session completion would lose hours of slow-model work the
+      // moment a run is stopped.
+      recordJudgments({
+        candidates: slice, cards: out.cards, rejected: out.rejected,
+        model: client.label, promptVersion: PROMPT_VERSION,
+      });
     }
 
     // Attach both locators before anything is stored.

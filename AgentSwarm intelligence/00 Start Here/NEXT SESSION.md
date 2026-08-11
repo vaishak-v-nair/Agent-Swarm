@@ -106,6 +106,46 @@ model so you only pay for candidates that survive.
 
 Full write-up: `recall/Recall Vault/03 Plans/P8 - The dataset, and RAG measured.md`.
 
+## ⚡ PHASE A — INTERRUPTED BY SHUTDOWN 2026-08-11, RESUME HERE
+
+Phase A was mid-flight when the machine was shut down. State on disk, all
+committed:
+
+**Done and verified (64/64 tests):**
+- **Lever 1 plumbing** — `recall/src/flywheel.js`: every judgment `recall
+  index` makes is appended per-BATCH (not per-session, so a killed run keeps
+  its work) to `RECALL_HOME/flywheel.jsonl`, redacted before writing.
+  `build.py` gained the `recall` loader (`source=recall`, constant question).
+- **Lever 3 wiring** — `judgeCapability()` now consults the measured league
+  table first (`datasets/agentswarm/models/league.json`, env `RECALL_LEAGUE`);
+  measured verdicts win in BOTH directions; the 12B size guess survives only
+  as a fallback for unmeasured models, and its message says how to measure.
+  Runner: `datasets/agentswarm/league.py` (appends after every model).
+- **Lever 4 MEASURED, verdict in** — 20 hand-written paraphrase queries vs the
+  real 62-card store (`recall/eval/paraphrase-queries.json` + `paraphrase.mjs`
+  + `paraphrase_dense.py`):
+  FTS5 **0.45** recall@1 · dense MiniLM **0.90**. Opposite of the public-data
+  fight (BM25 0.892 vs dense 0.748). **Verdict: hybrid retrieval, earned by
+  measurement.** Bonus finding: the store holds near-duplicate cards.
+
+**Killed by the shutdown (resume these):**
+1. `recall index --limit 2` with **qwen3.6:latest (36B, ~3 tok/s CPU)** was
+   mid-first-batch. Whatever batches finished are in
+   `recall/.store/flywheel.jsonl`; the ledger did NOT mark the session, so:
+   `ollama serve` then
+   `RECALL_HOME=E:/agent-swarm/recall/.store node recall/recall/bin/recall.js index --limit 2`
+   (config already points at ollama + qwen3.6:latest). ~23 candidates ≈
+   30-40 min. If a Groq key has been pasted into `.env` by then, use that
+   instead — minutes, not hours.
+2. **League run never started** (was queued behind the index run):
+   `cd recall/datasets/agentswarm && python league.py qwen2.5:3b qwen3:4b qwen3.6:latest --n 20`
+   Appends to `models/league.json` after each model; safe to kill anytime.
+3. **After flywheel rows exist:** `python build.py` then verify
+   `load("train", source="recall")` returns rows — that closes Lever 1's exit
+   criterion.
+4. Hybrid retrieval implementation (dense inside Node: ONNX/transformers.js or
+   a python sidecar) — now justified by the 0.45 vs 0.90 measurement.
+
 ## Build queue — now governed by P9, the 10x plan
 
 Read **`recall/Recall Vault/03 Plans/P9 - The 10x plan.md`** first. Six levers,

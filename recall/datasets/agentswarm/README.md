@@ -133,10 +133,33 @@ measurement.
 Honest scope on that verdict: this corpus is extractive QA, where questions
 share vocabulary with their passage *by construction* — lexically friendly
 ground for BM25. The original motivation for embeddings ("a question phrased
-differently than the card misses") is a *paraphrase* problem, and it remains
-unmeasured. The right next test is card-shaped: paraphrased queries against the
-real store. Until that measurement exists, the semantic-gap hypothesis is a
-hunch that just lost its first fight.
+differently than the card misses") is a *paraphrase* problem, and it needed its
+own measurement.
+
+### The card-shaped fight: same fighters, opposite verdict
+
+20 hand-written paraphrased queries against the real store's 62 cards — each
+query expresses a card's information need *without* the card's vocabulary
+(`recall/eval/paraphrase-queries.json`, committed so the method is auditable):
+
+| retriever | recall@1 | recall@3 | MRR |
+|---|---|---|---|
+| FTS5 (`store.search`, what Recall ships) | 0.45 | 0.60 | 0.535 |
+| **dense (same generic MiniLM-L6)** | **0.90** | **0.90** | **0.915** |
+
+**The two corpora give opposite verdicts because the query distributions
+differ.** Keyword-shaped queries: BM25 by 14 points. Paraphrase-shaped queries
+on real cards: dense by 2×. Neither ranker is "better" — they fail on disjoint
+inputs, which is precisely the case for **hybrid retrieval in Recall**, now
+earned by measurement on the actual product workload rather than adopted as
+fashion. (Implementation needs MiniLM inside Node — ONNX or transformers.js —
+which is its own task.)
+
+Bonus finding the eval surfaced for free: the store holds near-duplicate cards
+(the execFile/stdin gotcha exists twice, judged from different sessions). One
+"miss" was actually the duplicate ranking first — retrieval was semantically
+right and the scoring charged it a miss. Dedup-at-index is now a known store
+issue.
 
 Grounding is scored harshly on purpose: an answer that is fluent, on-topic and
 unsupported counts as a hallucination even when a human would call it basically
