@@ -185,9 +185,95 @@ def eval_answer(n=50, k=3, model=None):
     return out
 
 
+# ------------------------------------------------------ dense vs BM25 vs hybrid
+
+EMB_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+
+def embed(texts, model_name=EMB_MODEL, bs=16, max_len=256):
+    """Mean-pooled MiniLM embeddings, L2-normalised.
+
+    This is the sentence-transformers recipe without the sentence-transformers
+    dependency — it is not installed here, and one pooling function is not a
+    reason to add a package.
+    """
+    import torch
+    from transformers import AutoModel, AutoTokenizer
+
+    tok = AutoTokenizer.from_pretrained(model_name)
+    mod = AutoModel.from_pretrained(model_name)
+    mod.eval()
+    torch.set_num_threads(os.cpu_count() or 4)
+    out = []
+    with torch.no_grad():
+        for i in range(0, len(texts), bs):
+            enc = tok(texts[i:i + bs], padding=True, truncation=True,
+                      max_length=max_len, return_tensors="pt")
+            h = mod(**enc).last_hidden_state
+            m = enc["attention_mask"].unsqueeze(-1).float()
+            v = (h * m).sum(1) / m.sum(1).clamp(min=1e-9)
+            out.append(torch.nn.functional.normalize(v, dim=-1))
+    return torch.cat(out)
+
+
+def eval_dense(n=500, ks=(1, 3, 5, 10), pool=50):
+    """The three-way judgment: BM25 vs dense vs hybrid (reciprocal rank fusion).
+
+    This exists because the BM25 baseline (recall@1 0.892) was measured first,
+    precisely so that embeddings would have to BEAT a number to earn a place in
+    the store. Whatever wins here is what Recall's retrieval should become; if
+    dense loses, that is a result too, and it gets recorded rather than retried
+    until it flatters.
+    """
+    import time as _t
+
+    rows, docs, index = corpus(n)
+    bm = BM25(docs)
+
+    t0 = _t.time()
+    D = embed(docs)
+    Q = embed([r.question for r in rows])
+    embed_seconds = round(_t.time() - t0, 1)
+
+    sims = Q @ D.T   # cosine, since both sides are L2-normalised
+
+    def rank_of(gold, ordered):
+        try:
+            return ordered.index(gold) + 1
+        except ValueError:
+            return None
+
+    ranks = {"bm25": [], "dense": [], "hybrid": []}
+    for qi, r in enumerate(rows):
+        gold = index[r.context]
+        bm_top = [i for i, _ in bm.search(r.question, k=pool)]
+        de_top = sims[qi].topk(min(pool, len(docs))).indices.tolist()
+        # Reciprocal rank fusion, k=60 — the standard, parameter-light way to
+        # combine rankers that score on incomparable scales.
+        fused = {}
+        for lst in (bm_top, de_top):
+            for pos, doc in enumerate(lst):
+                fused[doc] = fused.get(doc, 0.0) + 1.0 / (60 + pos + 1)
+        hy_top = [d for d, _ in sorted(fused.items(), key=lambda kv: -kv[1])]
+        ranks["bm25"].append(rank_of(gold, bm_top))
+        ranks["dense"].append(rank_of(gold, de_top))
+        ranks["hybrid"].append(rank_of(gold, hy_top))
+
+    out = {"questions": len(rows), "documents": len(docs),
+           "embed_seconds": embed_seconds, "model": EMB_MODEL, "rankers": {}}
+    for name, rs in ranks.items():
+        out["rankers"][name] = {
+            "recall_at": {k: round(sum(1 for x in rs if x and x <= k) / len(rs), 4)
+                          for k in ks},
+            "mrr": round(sum(1 / x for x in rs if x) / len(rs), 4),
+        }
+    print(json.dumps(out, indent=2))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["index", "retrieve", "answer"])
+    ap.add_argument("cmd", choices=["index", "retrieve", "answer", "dense"])
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--k", type=int, default=3)
     ap.add_argument("--model")
@@ -197,6 +283,8 @@ def main():
         print(f"{len(rows)} questions over {len(docs)} documents")
     elif a.cmd == "retrieve":
         eval_retrieval(a.n)
+    elif a.cmd == "dense":
+        eval_dense(a.n)
     else:
         eval_answer(a.n, a.k, a.model)
 

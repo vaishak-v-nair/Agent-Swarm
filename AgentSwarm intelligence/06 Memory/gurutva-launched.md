@@ -8,7 +8,8 @@ metadata:
   modified: 2026-08-02T06:56:38.055Z
 ---
 
-Gurutva (`E:\space\gravity-posterior`, vault `E:\space\Gurutva Intelligence`)
+Gurutva (`E:\gurutva\gravity-posterior`, vault `E:\gurutva\Gurutva Intelligence`
+— **renamed from `E:\space` on 2026-08-04**; any older note saying `E:\space` means this)
 went public on **2026-08-02**:
 
 - repo public, **Apache-2.0** — github.com/vaishak-v-nair/Gurutva

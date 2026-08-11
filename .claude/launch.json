@@ -22,7 +22,7 @@
         "http.server",
         "8765",
         "--directory",
-        "E:/space/gravity-posterior/web"
+        "E:/gurutva/gravity-posterior/web"
       ],
       "port": 8765
     }

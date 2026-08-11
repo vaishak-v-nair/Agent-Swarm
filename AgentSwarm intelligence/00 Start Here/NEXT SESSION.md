@@ -106,24 +106,34 @@ model so you only pay for candidates that survive.
 
 Full write-up: `recall/Recall Vault/03 Plans/P8 - The dataset, and RAG measured.md`.
 
-## Build queue for the next session
+## Build queue — now governed by P9, the 10x plan
 
-1. **Dense retrieval vs BM25.** Embed contexts with MiniLM, compare against
-   0.892 / 0.966. **Only keep it if it wins** — the number exists precisely so
-   this can be decided rather than assumed.
-2. **Finish the answerability model.** CPU is the constraint; consider a
-   Colab/Kaggle GPU session for one proper run, then ship the weights back.
-3. **Turn `judgeCapability()` into a measurement.** It refuses sub-12B local
-   models on a hard-coded threshold inferred from one bad model.
-   `python rag.py answer --n 50 --model <m>` gives a real number per model.
-4. **THE ≥90% PRECISION GATE — only Vaishak can clear it.** ~50 published cards
-   read by a human. Machine checks cannot substitute: a card can be faithful to
-   its quote and still useless.
-5. **THE BASELINE WEEK** — armed 2026-08-01, still **zero entries**.
+Read **`recall/Recall Vault/03 Plans/P9 - The 10x plan.md`** first. Six levers,
+ranked by leverage per hour, each with an exit criterion. Summary:
+
+0. ~~**Dense retrieval vs BM25**~~ — **FOUGHT AND SETTLED 2026-08-04.** Dense
+   (MiniLM-L6) lost 0.748 vs 0.892 at recall@1; RRF hybrid also lost (0.866).
+   **No vector index.** `python rag.py dense --n 500` reproduces it. One open
+   question remains: the paraphrase case, which needs a card-shaped eval
+   (P9 Lever 4).
+1. **Lever 1 — the flywheel.** Every judgment `recall index` makes becomes a
+   labeled row (`source=recall`) in the dataset. Our exhaust → our training
+   data. ~2h.
+2. **Lever 3 — judge league table.** `rag.py answer --n 50 --model <m>` per
+   candidate model; delete the hard-coded 12B guess in `providers.js`.
+3. **Lever 4 — paraphrase eval.** Real store cards, paraphrased queries; does
+   BM25 hold? Verdict in the README either way.
+4. **Lever 2 — one GPU session** (Colab/Kaggle, free). Full 142k fine-tune,
+   ≥0.85 or it does not ship; ONNX export; wire as pre-filter at t=0.9.
+5. **Lever 5 — the cockpit pane** ("3 cards match what you are doing").
+   Entry-gated on Recall M2 + cockpit M1, unchanged from the CEO review.
+6. **Lever 6 — THE HUMAN GATES, only Vaishak:** the ≥90% precision read
+   (~50 cards, ~30 min — also produces the first human-labeled flywheel rows),
+   and **the baseline week** — armed 2026-08-01, still zero entries.
    `log A glance <what happened>` from any terminal.
-6. **`site/index.html` still plays the raw `agentswarm.mp4`,** not the film.
-7. **Deploy `site/`** to Vercel; wire the MSI download link.
-8. Parked with four gating questions: the **CV agent** idea.
+
+Still pending outside P9: `site/index.html` plays the raw `agentswarm.mp4`, not
+the film · deploy `site/` to Vercel + MSI link · the parked **CV agent** idea.
 
 ## Publish blockers — only Vaishak can decide
 

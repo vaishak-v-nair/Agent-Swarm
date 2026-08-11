@@ -82,6 +82,20 @@ measured number, and at recall@3 = 0.966 there is far less headroom than
 intuition suggests — the guard against a week spent on a vector index that wins
 nothing.
 
+**And then the fight happened (2026-08-04, later the same day):**
+
+| ranker | recall@1 | recall@3 | MRR |
+|---|---|---|---|
+| **BM25** | **0.892** | **0.966** | **0.930** |
+| dense (MiniLM-L6, mean-pooled) | 0.748 | 0.902 | 0.831 |
+| hybrid (reciprocal rank fusion) | 0.866 | 0.956 | 0.914 |
+
+**Dense lost by 14 points. Fusing it in made BM25 worse.** No vector index in
+Recall's retrieval — one 75-second measurement cancelled a week of default
+engineering. Scope caveat: extractive QA is lexically friendly ground for BM25;
+the paraphrase case ("question worded differently than the card") is still
+unmeasured and needs a card-shaped eval before embeddings get a second fight.
+
 Grounding is scored harshly on purpose: fluent, on-topic and unsupported counts
 as a hallucination even when a human would call it basically right.
 

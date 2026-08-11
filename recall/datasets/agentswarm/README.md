@@ -114,6 +114,30 @@ must beat a number that was *measured*. At recall@3 = 0.966 there is much less
 headroom than intuition suggests — which is the point of measuring before
 building a vector index.
 
+### Dense vs BM25: measured, and BM25 stays
+
+`python rag.py dense --n 500` — MiniLM-L6 bi-encoder (mean-pooled, normalised)
+against the same corpus, plus a reciprocal-rank-fusion hybrid:
+
+| ranker | recall@1 | recall@3 | recall@5 | MRR |
+|---|---|---|---|---|
+| **BM25** | **0.892** | **0.966** | **0.978** | **0.930** |
+| dense (MiniLM-L6) | 0.748 | 0.902 | 0.932 | 0.831 |
+| hybrid (RRF) | 0.866 | 0.956 | 0.976 | 0.914 |
+
+**Dense lost by 14 points at recall@1, and fusing it in made BM25 worse.**
+The verdict the baseline was built to deliver: no vector index in Recall's
+retrieval — the week of embedding work is cancelled by one 75-second
+measurement.
+
+Honest scope on that verdict: this corpus is extractive QA, where questions
+share vocabulary with their passage *by construction* — lexically friendly
+ground for BM25. The original motivation for embeddings ("a question phrased
+differently than the card misses") is a *paraphrase* problem, and it remains
+unmeasured. The right next test is card-shaped: paraphrased queries against the
+real store. Until that measurement exists, the semantic-gap hypothesis is a
+hunch that just lost its first fight.
+
 Grounding is scored harshly on purpose: an answer that is fluent, on-topic and
 unsupported counts as a hallucination even when a human would call it basically
 right.

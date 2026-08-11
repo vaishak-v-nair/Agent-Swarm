@@ -18,3 +18,4 @@
 - [Everything lives on E:](everything-lives-on-e-drive.md) — Recall moved inside agent-swarm; RECALL_HOME; what can't move and why
 - [Never pipe a long job through tail](never-pipe-a-long-job-through-tail.md) — empty log, exit 0 after being killed, 90 min of stolen CPU that contaminated every timing
 - [Open the file](a-schema-description-is-not-the-schema.md) — I called RAGTruth span-less by reading a feature list; verify against bytes, not docs
+- [Faceless tool state](faceless-tool-state.md) — session-1 end state, owner-only blockers, traps not to relearn

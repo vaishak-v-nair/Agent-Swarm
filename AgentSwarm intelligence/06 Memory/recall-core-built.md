@@ -29,8 +29,8 @@ never as authorship.
 
 **The bug real data found and inspection did not:** a transcript's `cwd` is
 where the SESSION started, not where the COMMAND ran. A session in
-`E:\agent-swarm` committed to `/e/faceless-video-pipeline`; one in `E:\space`
-committed to `/e/space/gravity-posterior`. **3 of 6 sampled commits would have
+`E:\agent-swarm` committed to `/e/faceless-video-pipeline`; one in `E:\space` (since renamed to `E:\gurutva`)
+committed to `/e/space/gravity-posterior` (now `/e/gurutva/gravity-posterior`). **3 of 6 sampled commits would have
 been cited to the wrong repo.** `effectiveRepo()` resolves `cd`, `Set-Location`
 and `git -C`. A second bug (PowerShell's `;` captured into the path) was caught
 only by a failing test.

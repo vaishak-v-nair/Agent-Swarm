@@ -5,14 +5,14 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 65b4e547-afd8-45ea-ae82-e6682794ea69
-  modified: 2026-08-02T07:02:09.455Z
+  modified: 2026-08-11T02:14:07.664Z
 ---
 
 From 2026-08-02 onward, anything to do with making a video goes to **three**
 places, not one:
 
 1. **The project's own vault** beside the code — e.g.
-   `E:\agent-swarm\AgentSwarm intelligence\`, `E:\space\Gurutva Intelligence\`.
+   `E:\agent-swarm\AgentSwarm intelligence\`, `E:\gurutva\Gurutva Intelligence\`.
 2. **The global mirror** in `E:\Second Brain\<Project> Intelligence\`.
 3. **`E:\Second Brain\Video Intelligence\`** — the cross-project one.
 
@@ -40,6 +40,15 @@ AgentSwarm film`, `04 Brainstorms/The feed-clip format, reverse engineered`,
 `05 Project Videos/AgentSwarm — intro film`, `06 Lessons/Why a film needs
 different rules than the product`. The AgentSwarm mirror is
 `E:\Second Brain\AgentSwarm Intelligence\07 Video\`.
+
+**Second application, 2026-08-04** — the `vidpipe` faceless-video pipeline
+(`E:\faceless-video-pipeline` code, `E:\content-workflow` data). Project vault
+`E:\content-workflow\Content Workflow Intelligence\`, global mirror
+`E:\Second Brain\Content Workflow Intelligence\`, and five technique-filed
+notes added to Video Intelligence (`01 Process/Render time is the binding
+constraint…`, `02 Planning/Concrete visual keywords beat abstract ones…`,
+`03 Tooling/Free and CC0 sourcing that actually works…`, `05 Project
+Videos/vidpipe…`, `06 Lessons/A green test suite proves nothing…`).
 
 **One refinement learned while first applying it:** the three copies are *not*
 identical. Project and global hold the working artefacts (brief, storyboard,

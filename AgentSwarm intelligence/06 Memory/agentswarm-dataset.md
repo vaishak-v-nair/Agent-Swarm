@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 9162a494-02c3-49ab-846a-4c3f8804c34d
-  modified: 2026-08-04T10:30:02.666Z
+  modified: 2026-08-11T02:17:30.730Z
 ---
 
 **`E:\agent-swarm\recall\datasets\agentswarm\`** — 416,174 rows, built
@@ -49,9 +49,20 @@ Retrieval / grounding / abstention scored separately, because one end-to-end
 score cannot say which half broke.
 
 **Measured BM25 baseline: recall@1 0.892, recall@3 0.966, recall@5 0.978,
-MRR 0.930.** Any embedding retriever must beat that. At 0.966 the headroom is
-far smaller than intuition suggests — the guard against burning a week on a
-vector index that wins nothing.
+MRR 0.930.** Any embedding retriever must beat that.
+
+**THE FIGHT HAPPENED (2026-08-04): dense LOST.** MiniLM-L6 bi-encoder 0.748
+recall@1; RRF hybrid 0.866 — both below plain BM25's 0.892. **No vector index
+in Recall.** `python rag.py dense --n 500` reproduces it. Open question: the
+paraphrase case (question worded unlike the card) is unmeasured — needs a
+card-shaped eval before embeddings get a rematch, and the rematch model should
+be flywheel-tuned, not generic MiniLM, which just lost.
+
+**The 10x plan is P9** (`recall/Recall Vault/03 Plans/P9 - The 10x plan.md`):
+six ranked levers — flywheel (judgments become training rows), GPU session for
+the gate (≥0.85 or no ship), judge league table (delete the 12B guess),
+paraphrase eval, cockpit pane (entry-gated), and the two human gates that
+multiply everything else by zero until cleared.
 
 ## ML — `train.py`, and the CPU wall
 
