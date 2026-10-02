@@ -251,6 +251,11 @@ function wireTerm(p) {
   // Plain ctrl+C stays what it has always been in a terminal — the interrupt.
   // Handled here, before xterm, so the keys never reach the PTY as bytes.
   p.term.attachCustomKeyEventHandler(e => {
+    if (e.type === 'keydown' && e.key === 'Escape') {
+      if (paletteOpen) { e.preventDefault(); closePalette(); return false; }
+      if (timelineOpen) { e.preventDefault(); closeTimeline(); return false; }
+      if (sheetOpen) { e.preventDefault(); closeSheet(); return false; }
+    }
     if (e.type !== 'keydown' || !e.ctrlKey || !e.shiftKey) return true;
     if (e.key === 'C' || e.key === 'c') {
       const sel = p.term.getSelection();
