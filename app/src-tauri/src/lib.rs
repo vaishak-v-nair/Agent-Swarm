@@ -1,3 +1,4 @@
+pub mod attention;
 pub mod doctor;
 pub mod event;
 pub mod git;
@@ -46,6 +47,17 @@ struct WebviewSink {
 
 impl Sink for WebviewSink {
     fn data(&self, id: u32, text: &str) {
+        if text.contains('\x07') {
+            let evt = event::AgentEvent::new(
+                id,
+                event::EventKind::Bell,
+                format!("pane {id} terminal bell rung"),
+                serde_json::json!({ "pane_id": id }),
+                false,
+            );
+            let _ = self.store.insert(&evt);
+            let _ = self.app.emit("agent:event", &evt);
+        }
         let _ = self.app.emit("pty:data", Chunk { id, data: text });
     }
     fn exit(&self, id: u32) {
@@ -520,6 +532,18 @@ fn steer_pane(
     steer::execute_steer(&state.panes, req, &state.session_token)
 }
 
+#[tauri::command]
+fn get_attention_queue(
+    state: State<AppState>,
+    pane_ids: Vec<u32>,
+) -> Vec<attention::AttentionItem> {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    attention::AttentionScorer::rank_panes(&pane_ids, &state.store, now_ms)
+}
+
 fn get_event_store_path() -> std::path::PathBuf {
     if let Ok(base) = std::env::var("LOCALAPPDATA") {
         let dir = std::path::PathBuf::from(base).join("agentswarm");
@@ -650,7 +674,8 @@ pub fn run() {
             event_query,
             event_query_errors,
             get_session_token,
-            steer_pane
+            steer_pane,
+            get_attention_queue
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentSwarm");

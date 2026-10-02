@@ -11,6 +11,7 @@ pub enum EventKind {
     Verification,
     SteerMessage,
     ProcessExit,
+    Bell,
 }
 
 impl std::fmt::Display for EventKind {
@@ -24,6 +25,7 @@ impl std::fmt::Display for EventKind {
             EventKind::Verification => "verification",
             EventKind::SteerMessage => "steer_message",
             EventKind::ProcessExit => "process_exit",
+            EventKind::Bell => "bell",
         };
         write!(f, "{s}")
     }
@@ -41,6 +43,7 @@ impl std::str::FromStr for EventKind {
             "verification" => Ok(EventKind::Verification),
             "steer_message" => Ok(EventKind::SteerMessage),
             "process_exit" => Ok(EventKind::ProcessExit),
+            "bell" => Ok(EventKind::Bell),
             other => Err(format!("unknown event kind: {other}")),
         }
     }
