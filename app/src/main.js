@@ -194,7 +194,7 @@ function refit(p) {
   if (p.cols === cols && p.rows === rows) return; // nothing changed; don't spam the PTY
   p.cols = cols;
   p.rows = rows;
-  invoke('pty_resize', { id: p.id, cols, rows });
+  invoke('pty_resize', { id: p.id, cols, rows }).catch(e => diag(`pty_resize on ${p.id} failed: ${e}`));
 }
 
 /** Anything the UI needs to say out loud. Goes to the app's stdout so a failure
