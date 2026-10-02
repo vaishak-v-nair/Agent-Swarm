@@ -47,7 +47,9 @@ fn ps_quote(s: &str) -> String {
 /// environment, including `CLAUDE_CODE_CHILD_SESSION`. A `claude` that sees that
 /// marker believes it is a nested sub-session and turns itself down accordingly:
 ///
-///     ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker
+/// ```text
+/// ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker
+/// ```
 ///
 /// With transcript saving off there is no transcript, so the semantic layer has
 /// nothing to follow and prompt history has nowhere to live. Two headline

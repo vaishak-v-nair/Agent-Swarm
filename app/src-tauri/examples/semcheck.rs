@@ -83,9 +83,10 @@ fn main() {
     let s = seen.clone();
     transcript::watch(
         1,
-        cwd,
+        cwd.into(),
+        "claude-jsonl".into(),
         std::time::SystemTime::now(),
-        move |c| {
+        move |c: transcript::Card| {
             let n = s.fetch_add(1, Ordering::Relaxed) + 1;
             if n <= 8 {
                 let b: String = c.body.chars().take(72).collect();

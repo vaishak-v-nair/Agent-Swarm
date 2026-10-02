@@ -1,8 +1,11 @@
 pub mod doctor;
+pub mod event;
 pub mod git;
 pub mod pty;
 pub mod recipes;
 pub mod settings;
+pub mod steer;
+pub mod store;
 pub mod transcript;
 
 use pty::{Panes, Sink};
@@ -36,19 +39,33 @@ struct Status {
 /// The emit is fire-and-forget by design — a rendering problem must never stall
 /// the reader thread, because the reader holds no lock the writer needs and that
 /// is the whole reason typing stays instant under load.
-struct WebviewSink(AppHandle);
+struct WebviewSink {
+    app: AppHandle,
+    store: Arc<store::EventStore>,
+}
 
 impl Sink for WebviewSink {
     fn data(&self, id: u32, text: &str) {
-        let _ = self.0.emit("pty:data", Chunk { id, data: text });
+        let _ = self.app.emit("pty:data", Chunk { id, data: text });
     }
     fn exit(&self, id: u32) {
-        let _ = self.0.emit("pty:exit", Exit { id });
+        let evt = event::AgentEvent::new(
+            id,
+            event::EventKind::ProcessExit,
+            format!("pane {id} exited"),
+            serde_json::json!({ "pane_id": id }),
+            false,
+        );
+        let _ = self.store.insert(&evt);
+        let _ = self.app.emit("agent:event", &evt);
+        let _ = self.app.emit("pty:exit", Exit { id });
     }
 }
 
-struct AppState {
-    panes: Arc<Panes>,
+pub struct AppState {
+    pub panes: Arc<Panes>,
+    pub store: Arc<store::EventStore>,
+    pub session_token: String,
 }
 
 #[tauri::command]
@@ -72,7 +89,10 @@ fn pty_spawn(
         keep_open: d.keep_open,
     });
     pty::spawn(
-        Arc::new(WebviewSink(app)),
+        Arc::new(WebviewSink {
+            app,
+            store: state.store.clone(),
+        }),
         state.panes.clone(),
         id,
         &profile,
@@ -294,22 +314,18 @@ async fn file_history(cwds: Vec<String>, path: String, limit: Option<usize>) -> 
 /// This is separate from pty_spawn on purpose. The terminal must work whether or
 /// not the semantic layer does — understanding is an addition, never a dependency.
 #[tauri::command]
-fn sem_attach(app: AppHandle, id: u32, cwd: String, profile: Option<String>) {
-    // A profile declares where its agent writes. Claude's own location is
-    // expressed through the same mechanism rather than as a special case.
-    // A profile gets the semantic layer only if it actually keeps a session
-    // record. M12 removed the frontend's `profile === 'claude'` check and let
-    // everything fall back to Claude's directory, so a plain PowerShell pane
-    // attached to whatever Claude session was newest and displayed another
-    // session's work as its own — a shell pane confidently reporting somebody
-    // else's tool calls is worse than a shell pane reporting nothing.
+fn sem_attach(
+    app: AppHandle,
+    state: State<AppState>,
+    id: u32,
+    cwd: String,
+    profile: Option<String>,
+) {
     let name = profile.unwrap_or_default();
     let declared = settings::load(&cwd).settings.profiles.remove(&name).and_then(|p| p.transcript);
 
     let (template, format) = match declared {
         Some(t) => (t.dir, t.format),
-        // Claude's own location stays expressed as a template rather than as a
-        // branch in the reader — the M12 property — but it belongs to `claude`.
         None if name == "claude" => (transcript::CLAUDE_DIR.to_string(), "claude-jsonl".to_string()),
         None => {
             let _ = app.emit("sem:status", Status {
@@ -332,12 +348,33 @@ fn sem_attach(app: AppHandle, id: u32, cwd: String, profile: Option<String>) {
 
     let a1 = app.clone();
     let a2 = app.clone();
+    let store1 = state.store.clone();
     transcript::watch(
         id,
         dir,
         format,
         std::time::SystemTime::now(),
         move |card| {
+            let title = if card.title.is_empty() {
+                card.body.chars().take(80).collect()
+            } else {
+                card.title.clone()
+            };
+            let evt = event::AgentEvent::new(
+                id,
+                if card.kind == "tool" {
+                    event::EventKind::ToolCall
+                } else if card.kind == "error" {
+                    event::EventKind::ErrorLoop
+                } else {
+                    event::EventKind::PromptInput
+                },
+                title,
+                serde_json::to_value(&card).unwrap_or(serde_json::Value::Null),
+                card.kind == "error",
+            );
+            let _ = store1.insert(&evt);
+            let _ = a1.emit("agent:event", &evt);
             let _ = a1.emit("sem:card", card);
         },
         move |text, own| {
@@ -416,6 +453,91 @@ fn available_profiles(cwd: Option<String>) -> Vec<String> {
     out
 }
 
+#[tauri::command]
+fn event_emit(
+    app: AppHandle,
+    state: State<AppState>,
+    pane_id: u32,
+    kind: String,
+    summary: String,
+    data: Option<serde_json::Value>,
+    is_error: Option<bool>,
+) -> Result<event::AgentEvent, String> {
+    let parsed_kind = kind.parse().map_err(|e: String| e)?;
+    let evt = event::AgentEvent::new(
+        pane_id,
+        parsed_kind,
+        summary,
+        data.unwrap_or(serde_json::Value::Null),
+        is_error.unwrap_or(false),
+    );
+    let _ = state.store.insert(&evt);
+    let _ = app.emit("agent:event", &evt);
+    Ok(evt)
+}
+
+#[tauri::command]
+fn event_query(
+    state: State<AppState>,
+    pane_id: Option<u32>,
+    limit: Option<usize>,
+) -> Result<Vec<event::AgentEvent>, String> {
+    let lim = limit.unwrap_or(50);
+    if let Some(pid) = pane_id {
+        state.store.query_by_pane(pid, lim).map_err(|e| e.to_string())
+    } else {
+        state.store.query_recent(lim).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn event_query_errors(
+    state: State<AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<event::AgentEvent>, String> {
+    state.store.query_errors(limit.unwrap_or(50)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_session_token(state: State<AppState>) -> String {
+    state.session_token.clone()
+}
+
+#[tauri::command]
+fn steer_pane(
+    state: State<AppState>,
+    token: String,
+    pane_id: u32,
+    action: String,
+    payload: String,
+) -> steer::SteerResponse {
+    let req = steer::SteerRequest {
+        token,
+        pane_id,
+        action,
+        payload,
+    };
+    steer::execute_steer(&state.panes, req, &state.session_token)
+}
+
+fn get_event_store_path() -> std::path::PathBuf {
+    if let Ok(base) = std::env::var("LOCALAPPDATA") {
+        let dir = std::path::PathBuf::from(base).join("agentswarm");
+        let _ = std::fs::create_dir_all(&dir);
+        dir.join("events.db")
+    } else {
+        std::path::PathBuf::from("events.db")
+    }
+}
+
+fn write_session_token(token: &str) {
+    if let Ok(base) = std::env::var("LOCALAPPDATA") {
+        let dir = std::path::PathBuf::from(base).join("agentswarm");
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("session.token"), token);
+    }
+}
+
 fn which(bin: &str) -> bool {
     std::env::var_os("PATH")
         .map(|paths| {
@@ -479,8 +601,20 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(|app| {
+            let panes = Arc::new(Panes::default());
+            let session_token = uuid::Uuid::new_v4().simple().to_string();
+            write_session_token(&session_token);
+
+            let store_path = get_event_store_path();
+            let store = Arc::new(store::EventStore::open(&store_path).unwrap_or_else(|e| {
+                eprintln!("[store] falling back to in-memory event store: {e}");
+                store::EventStore::in_memory().expect("in-memory event store")
+            }));
+
             app.manage(AppState {
-                panes: Arc::new(Panes::default()),
+                panes,
+                store,
+                session_token,
             });
             Ok(())
         })
@@ -511,7 +645,12 @@ pub fn run() {
             startup_swarm,
             demo_requested,
             set_attention,
-            diag
+            diag,
+            event_emit,
+            event_query,
+            event_query_errors,
+            get_session_token,
+            steer_pane
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentSwarm");
