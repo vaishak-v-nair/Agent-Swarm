@@ -162,8 +162,10 @@ mod tests {
     use super::{ps_quote, scrub_session_env};
     use portable_pty::CommandBuilder;
 
-    /// This test mutates process environment, so it must not run beside another
-    /// that reads it. Nothing else here touches env.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// This test mutates process environment, so it acquires ENV_LOCK to
+    /// prevent racing with other tests running in parallel threads.
     #[test]
     fn a_profile_from_settings_is_quoted_like_everything_else() {
         use super::{resolve_custom, Custom};
@@ -178,6 +180,7 @@ mod tests {
 
     #[test]
     fn a_pane_does_not_inherit_the_session_that_launched_the_app() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // The bug: AgentSwarm launched from a terminal running Claude Code passed
         // CLAUDE_CODE_CHILD_SESSION to every pane. Each pane then believed it was
         // a nested sub-session and disabled transcript saving — which silently
@@ -211,6 +214,7 @@ mod tests {
 
     #[test]
     fn a_users_own_base_url_survives_outside_a_nested_session() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // no child markers set: ANTHROPIC_BASE_URL is the user's own choice
         std::env::remove_var("CLAUDE_CODE_CHILD_SESSION");
         std::env::remove_var("CLAUDECODE");
