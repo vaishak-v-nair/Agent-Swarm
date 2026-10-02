@@ -420,7 +420,7 @@ async function newPane(profile = 'powershell', opts = {}) {
     `<div class="term"></div>` +
     `<div class="flow"><div class="flow-status">watching for a session…</div><div class="cards"></div></div>` +
     `<div class="peek"></div>` +
-    `<div class="find"><input placeholder="find in this pane" spellcheck="false">` +
+    `<div class="find"><input id="find-pane-${id}" name="find-in-pane" placeholder="find in this pane" spellcheck="false">` +
     `<span class="find-x" title="close (esc)">✕</span></div>`;
   // textContent, not template interpolation: a label comes from a recipe file
   el.querySelector('.name').textContent = label || profile;
@@ -740,6 +740,8 @@ async function showSearch(initial = '') {
   const body = document.getElementById('sh-body');
 
   const bar = document.createElement('input');
+  bar.id = 'sh-search-input';
+  bar.name = 'search-query';
   bar.className = 'sh-input';
   bar.placeholder = 'what did I decide about…';
   bar.value = initial;
@@ -897,7 +899,7 @@ async function showSettings() {
   for (const [key, label, help] of SETTING_FIELDS) {
     const row = document.createElement('div');
     row.className = 'set-row';
-    row.innerHTML = '<label></label><input type="number" min="1"><span class="set-help"></span>';
+    row.innerHTML = `<label for="setting-${key}"></label><input id="setting-${key}" name="${key}" type="number" min="1"><span class="set-help"></span>`;
     row.querySelector('label').textContent = label;
     const inp = row.querySelector('input');
     inp.value = SETTINGS[key];
@@ -909,7 +911,7 @@ async function showSettings() {
   const layoutRow = document.createElement('div');
   layoutRow.className = 'set-row';
   layoutRow.innerHTML =
-    '<label>layout</label><select><option value="stage">stage</option><option value="grid">grid</option></select>' +
+    '<label for="setting-layout">layout</label><select id="setting-layout" name="layout"><option value="stage">stage</option><option value="grid">grid</option></select>' +
     '<span class="set-help">stage: one pane at reading size · grid: every pane tiled</span>';
   const layoutSel = layoutRow.querySelector('select');
   layoutSel.value = layout;
@@ -918,7 +920,7 @@ async function showSettings() {
   const restoreRow = document.createElement('div');
   restoreRow.className = 'set-row';
   restoreRow.innerHTML =
-    '<label>reopen panes</label><input type="checkbox"><span class="set-help">bring back what was open, next launch</span>';
+    '<label for="setting-restore_layout">reopen panes</label><input id="setting-restore_layout" name="restore_layout" type="checkbox"><span class="set-help">bring back what was open, next launch</span>';
   const restoreChk = restoreRow.querySelector('input');
   restoreChk.checked = SETTINGS.restore_layout;
   form.appendChild(restoreRow);
