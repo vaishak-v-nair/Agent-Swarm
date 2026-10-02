@@ -24,7 +24,8 @@
     window.__calls = [];        // every invoke, in order
     window.__listeners = {};    // event name -> callback id
 
-    const CWD = 'E:\\agent-swarm';
+    const searchParams = new URLSearchParams(location.search);
+    const CWD = searchParams.get('cwd') || (location.pathname.startsWith('/') ? location.origin : '.');
 
     let nextCb = 0;
     window.__TAURI_INTERNALS__ = {
@@ -33,8 +34,24 @@
         window['_' + id] = cb;
         return id;
       },
-      invoke(cmd, payload) {
+      async invoke(cmd, payload) {
         window.__calls.push({ cmd, payload });
+        try {
+          const res = await fetch('/api/bridge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cmd, payload }),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.ok && json.data !== null && json.data !== undefined) {
+              return json.data;
+            }
+          }
+        } catch {
+          // Dev bridge unavailable, fall back to dynamic in-memory handling
+        }
+
         switch (cmd) {
           case 'plugin:event|listen':
             window.__listeners[payload.event] = payload.handler;
@@ -46,77 +63,49 @@
           case 'default_cwd':
             return Promise.resolve(CWD);
           case 'startup_swarm':
-            return Promise.resolve(new URLSearchParams(location.search).get('swarm'));
+            return Promise.resolve(searchParams.get('swarm'));
 
           case 'git_changes':
             return Promise.resolve({
               root: CWD, branch: 'main', problem: '',
-              files: [
-                { path: 'app/src/main.js',           status: ' M', added: 214, removed: 12, untracked: false },
-                { path: 'app/src-tauri/src/git.rs',  status: '??', added: 0,   removed: 0,  untracked: true },
-                { path: 'app/src/style.css',         status: ' M', added: 71,  removed: 1,  untracked: false },
-              ],
+              files: searchParams.has('mock') ? [
+                { path: 'app/src/main.js', status: ' M', added: 0, removed: 0, untracked: false },
+              ] : [],
             });
 
           case 'git_file_diff':
-            return Promise.resolve([
-              '--- a/app/src/main.js',
-              '+++ b/app/src/main.js',
-              '@@ -1,4 +1,6 @@',
-              ' import { invoke } from "@tauri-apps/api/core";',
-              '+import { score, insertOrdered } from "./order.js";',
-              '-const removed = true;',
-              ' unchanged line',
-            ].join('\n'));
+            return Promise.resolve('');
 
           case 'search_history':
-            return Promise.resolve(/zzz/.test(payload.query) ? [] : [
-              { session: '7e015ca2.jsonl', line: 1841, iso: '2026-07-31T16:12:00Z',
-                kind: 'you', title: 'you',
-                body: 'Build M2 — the semantic layer', cwd: CWD },
-              { session: '7e015ca2.jsonl', line: 1902, iso: '2026-07-31T16:33:00Z',
-                kind: 'claude', title: 'claude',
-                body: 'Structure comes from the transcript, never from scraping the terminal.', cwd: CWD },
-            ]);
+            return Promise.resolve([]);
 
           case 'file_history':
-            return Promise.resolve([
-              { session: '7e015ca2.jsonl', line: 1765, iso: '2026-07-31T17:27:00Z',
-                kind: 'tool', title: 'Write', body: payload.path, cwd: CWD,
-                context: 'The state machine is the risky part of M3 — extracting it so it can be tested rather than assumed.' },
-              { session: '7e015ca2.jsonl', line: 1827, iso: '2026-07-31T17:43:00Z',
-                kind: 'tool', title: 'Edit', body: payload.path, cwd: CWD,
-                context: 'Now the state machine must refuse to infer from a transcript that is not the pane own.' },
-              { session: '7e015ca2.jsonl', line: 1832, iso: '2026-07-31T17:43:00Z',
-                kind: 'tool', title: 'Edit', body: payload.path, cwd: CWD,
-                context: 'Now the state machine must refuse to infer from a transcript that is not the pane own.' },
-            ]);
+            return Promise.resolve([]);
           case 'load_settings':
             return Promise.resolve({
               settings: { quiet_ms: 2000, stuck_ms: 30000, burst_floor: 800,
                           scrollback: 10000, feed_max: 2000, restore_layout: true },
-              source: 'E:/agent-swarm/.agentswarm/settings.json', problem: '',
+              source: 'defaults', problem: '',
             });
           case 'write_settings_template':
-            return Promise.resolve('E:/agent-swarm/.agentswarm/settings.json');
+            return Promise.resolve('.agentswarm/settings.json');
           case 'save_layout':
             window.__savedLayout = payload.panes;
             return Promise.resolve(null);
           case 'load_layout':
-            return Promise.resolve(new URLSearchParams(location.search).has('restore') ? [
+            return Promise.resolve(searchParams.has('restore') ? [
               { profile: 'claude', cwd: CWD, label: 'restored-a', args: [] },
               { profile: 'powershell', cwd: CWD, label: 'restored-b', args: [] },
             ] : []);
           case 'seed_first_run':
-            return Promise.resolve(new URLSearchParams(location.search).has('firstrun')
-              ? CWD + '\\.agentswarm\\recipes.json' : null);
+            return Promise.resolve(searchParams.has('firstrun')
+              ? CWD + '/.agentswarm/recipes.json' : null);
           case 'about':
-            // Rust hands over finished paths; the UI never joins separators itself.
             return Promise.resolve({
               version: '0.1.0',
               cwd: CWD,
-              config_dir: CWD + '\\.agentswarm',
-              transcripts: 'C:\\Users\\you\\.claude\\projects\\E--agent-swarm',
+              config_dir: CWD + '/.agentswarm',
+              transcripts: '',
             });
           case 'clip_write':
             window.__clipboard = payload.text;
@@ -128,7 +117,7 @@
             return Promise.resolve(null);
           case 'save_settings':
             window.__savedSettings = payload;
-            return Promise.resolve(CWD + '\\.agentswarm\\settings.json');
+            return Promise.resolve(CWD + '/.agentswarm/settings.json');
           case 'list_recipes':
             return Promise.resolve({
               problems: [],

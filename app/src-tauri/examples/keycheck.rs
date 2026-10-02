@@ -58,7 +58,11 @@ fn readable(s: &str) -> String {
 
 fn main() -> anyhow::Result<()> {
     let profile = std::env::args().nth(1).unwrap_or_else(|| "powershell".into());
-    let cwd = std::env::args().nth(2).unwrap_or_else(|| "E:\\agent-swarm".into());
+    let cwd = std::env::args().nth(2).unwrap_or_else(|| {
+        std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| ".".into())
+    });
     let boot: u64 = std::env::args().nth(3).and_then(|s| s.parse().ok()).unwrap_or(10);
 
     let buf = Arc::new(Buf(Mutex::new(String::new())));

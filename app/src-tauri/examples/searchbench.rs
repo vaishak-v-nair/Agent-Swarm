@@ -16,7 +16,11 @@ fn ms(f: impl FnOnce() -> usize) -> (u128, usize) {
 }
 
 fn main() {
-    let cwd = std::env::args().nth(1).unwrap_or_else(|| "E:\\agent-swarm".into());
+    let cwd = std::env::args().nth(1).unwrap_or_else(|| {
+        std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| ".".into())
+    });
     let cwds = vec![cwd.clone()];
 
     // How much is actually on disk, so the numbers have a denominator.
