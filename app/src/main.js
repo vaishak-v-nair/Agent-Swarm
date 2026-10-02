@@ -9,6 +9,7 @@ import { paneState, fmt } from './state.js';
 import { score, insertOrdered } from './order.js';
 import { lastMeaningful } from './peek.js';
 import { runDemo } from './demo.js';
+import { AttentionController } from './modules/attention.js';
 import '@xterm/xterm/css/xterm.css';
 
 addEventListener('error', e => diag('window error: ' + e.message + ' @' + e.filename + ':' + e.lineno));
@@ -417,6 +418,9 @@ async function newPane(profile = 'powershell', opts = {}) {
     `<span class="state">starting</span>` +
     `<span class="mode" title="raw output ⇄ plain english (ctrl+shift+E)">raw</span>` +
     `<span class="x" title="close">✕</span></div>` +
+    `<div class="pane-action-banner" style="display:none;">` +
+    `<span class="action-banner-text"></span>` +
+    `<div class="action-banner-btns"></div></div>` +
     `<div class="term"></div>` +
     `<div class="flow"><div class="flow-status">watching for a session…</div><div class="cards"></div></div>` +
     `<div class="peek"></div>` +
@@ -437,6 +441,10 @@ async function newPane(profile = 'powershell', opts = {}) {
               modeEl: el.querySelector('.mode'),
               stateEl: el.querySelector('.state'),
               peekEl: el.querySelector('.peek'), lastLine: '', lastCard: '',
+              actionBanner: el.querySelector('.pane-action-banner'),
+              actionText: el.querySelector('.action-banner-text'),
+              actionBtns: el.querySelector('.action-banner-btns'),
+              dismissedReason: null,
               sem: false, pinned: true, muted: false,
               // M3 state: tools called but not yet finished, keyed by tool_use id
               pending: new Map(), lastByte: 0, lastCardAt: 0, lastKind: null, bellAt: 0,
@@ -1248,6 +1256,134 @@ const toggleAllModes = () => {
 
 let lastTitle = '';
 
+const attentionBarEl = document.getElementById('attention-bar');
+let latestAttentionItems = new Map();
+const attentionCtrl = new AttentionController({
+  soundEnabled: true,
+  onQueueUpdated: items => {
+    latestAttentionItems = new Map(items.map(it => [it.pane_id, it]));
+    renderAttentionBar(items);
+    updateActionBanners(items);
+    renderMuster();
+  }
+});
+
+function renderAttentionBar(items = []) {
+  if (!attentionBarEl) return;
+  const actionable = items.filter(it => it.level === 'urgent' || it.level === 'action_needed');
+  if (actionable.length === 0) {
+    if (panes.size === 0) {
+      attentionBarEl.innerHTML = '';
+      return;
+    }
+    attentionBarEl.innerHTML = '<span class="attn-chip nominal"><span class="attn-dot"></span> all systems nominal</span>';
+    return;
+  }
+
+  attentionBarEl.innerHTML = '';
+  for (const it of actionable.slice(0, 4)) {
+    const chip = document.createElement('span');
+    chip.className = `attn-chip ${it.level === 'urgent' ? 'urgent' : 'action'}`;
+    chip.title = `#${it.pane_id} — ${it.reason} (Score: ${it.score})`;
+
+    const badge = document.createElement('span');
+    badge.className = 'attn-badge';
+    badge.textContent = `#${it.pane_id}`;
+
+    const label = document.createElement('span');
+    label.className = 'attn-label';
+    label.textContent = it.reason.length > 28 ? it.reason.slice(0, 26) + '…' : it.reason;
+
+    chip.append(badge, label);
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      focus(it.pane_id);
+    });
+    attentionBarEl.appendChild(chip);
+  }
+}
+
+function updateActionBanners(items = []) {
+  const itemMap = new Map(items.map(it => [it.pane_id, it]));
+  for (const [id, p] of panes) {
+    if (!p.actionBanner) continue;
+    const it = itemMap.get(id);
+    if (!it || (it.level !== 'urgent' && it.level !== 'action_needed')) {
+      p.actionBanner.style.display = 'none';
+      p.dismissedReason = null;
+      continue;
+    }
+
+    if (p.dismissedReason === it.reason) {
+      continue;
+    }
+
+    p.actionBanner.style.display = 'flex';
+    p.actionBanner.className = `pane-action-banner ${it.level === 'urgent' ? 'banner-urgent' : 'banner-action'}`;
+    p.actionText.textContent = it.reason;
+    p.actionBtns.innerHTML = '';
+
+    const lowerReason = it.reason.toLowerCase();
+
+    if (lowerReason.includes('permission') || lowerReason.includes('prompt') || lowerReason.includes('approval') || lowerReason.includes('confirm')) {
+      const approveBtn = document.createElement('button');
+      approveBtn.className = 'action-banner-btn approve';
+      approveBtn.textContent = 'Approve (y)';
+      approveBtn.onclick = (e) => {
+        e.stopPropagation();
+        p.bellAt = 0;
+        p.el.classList.remove('unseen');
+        invoke('pty_write', { id: p.id, data: 'y\r' });
+        p.actionBanner.style.display = 'none';
+        p.dismissedReason = it.reason;
+      };
+
+      const rejectBtn = document.createElement('button');
+      rejectBtn.className = 'action-banner-btn reject';
+      rejectBtn.textContent = 'Reject (n)';
+      rejectBtn.onclick = (e) => {
+        e.stopPropagation();
+        p.bellAt = 0;
+        p.el.classList.remove('unseen');
+        invoke('pty_write', { id: p.id, data: 'n\r' });
+        p.actionBanner.style.display = 'none';
+        p.dismissedReason = it.reason;
+      };
+
+      p.actionBtns.append(approveBtn, rejectBtn);
+    } else if (lowerReason.includes('crash') || lowerReason.includes('exit')) {
+      const restartBtn = document.createElement('button');
+      restartBtn.className = 'action-banner-btn restart';
+      restartBtn.textContent = 'Restart';
+      restartBtn.onclick = (e) => {
+        e.stopPropagation();
+        restartPane(p.id);
+      };
+      p.actionBtns.appendChild(restartBtn);
+    } else {
+      const focusBtn = document.createElement('button');
+      focusBtn.className = 'action-banner-btn focus-btn';
+      focusBtn.textContent = 'Focus';
+      focusBtn.onclick = (e) => {
+        e.stopPropagation();
+        focus(p.id);
+      };
+      p.actionBtns.appendChild(focusBtn);
+    }
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'action-banner-btn dismiss';
+    dismissBtn.textContent = '✕';
+    dismissBtn.title = 'Dismiss banner';
+    dismissBtn.onclick = (e) => {
+      e.stopPropagation();
+      p.actionBanner.style.display = 'none';
+      p.dismissedReason = it.reason;
+    };
+    p.actionBtns.appendChild(dismissBtn);
+  }
+}
+
 /** One lamp per pane, in pane order — the whole cockpit as a single row.
  *  Rebuilt only when the shape or the states actually change, so a 500ms tick
  *  is not rewriting DOM for nothing. */
@@ -1255,7 +1391,10 @@ let musterKey = '';
 function renderMuster() {
   const rail = document.getElementById('muster');
   if (!rail) return;
-  const states = [...panes.values()].map(p => p.state?.key || 'idle');
+  const states = [...panes.values()].map(p => {
+    const attn = latestAttentionItems.get(p.id)?.level || 'nominal';
+    return `${p.state?.key || 'idle'}:${attn}`;
+  });
   const key = states.join(',');
   if (key === musterKey) return;
   musterKey = key;
@@ -1265,7 +1404,15 @@ function renderMuster() {
     const lamp = document.createElement('span');
     lamp.className = 'lamp';
     lamp.dataset.state = p.state?.key || 'idle';
-    lamp.title = `#${p.id} ${p.label || p.profile} — ${p.state?.label || ''}`;
+    const attn = latestAttentionItems.get(p.id);
+    if (attn && (attn.level === 'urgent' || attn.level === 'action_needed')) {
+      lamp.dataset.attention = attn.level;
+    }
+    let title = `#${p.id} ${p.label || p.profile} — ${p.state?.label || ''}`;
+    if (attn && attn.reason && (attn.level === 'urgent' || attn.level === 'action_needed')) {
+      title += ` · [ATTN: ${attn.reason}]`;
+    }
+    lamp.title = title;
     lamp.addEventListener('click', () => focus(p.id));
     rail.appendChild(lamp);
   }
@@ -1278,7 +1425,9 @@ function renderMuster() {
 const BURST_FLOOR = 800;
 const DECAY = 0.55;
 
+let tickCount = 0;
 function tick() {
+  tickCount++;
   const now = Date.now();
   let needs = 0, working = 0;
 
@@ -1312,6 +1461,12 @@ function tick() {
   // is the difference between reading the room and auditing nine headers.
   renderMuster();
 
+  if (tickCount % 2 === 0 && panes.size > 0) {
+    attentionCtrl.updateQueue([...panes.keys()]);
+  } else if (panes.size === 0) {
+    renderAttentionBar([]);
+  }
+
   const bits = [];
   if (needs) bits.push(`${needs} waiting`);
   if (working) bits.push(`${working} running`);
@@ -1340,6 +1495,14 @@ setInterval(tick, 500);
 /** Jump to whatever is waiting on you, oldest first. The point of a cockpit is
  *  that you never have to go looking. */
 function jumpToNeedy() {
+  const urgentAttn = [...latestAttentionItems.values()]
+    .filter(it => it.level === 'urgent' || it.level === 'action_needed')
+    .sort((a, b) => b.score - a.score);
+  if (urgentAttn.length) {
+    const i = urgentAttn.findIndex(it => it.pane_id === focused);
+    focus(urgentAttn[(i + 1) % urgentAttn.length].pane_id);
+    return;
+  }
   const waiting = [...panes.values()]
     .filter(p => p.state?.key === 'needs')
     .sort((a, b) => b.state.since - a.state.since);
@@ -1453,6 +1616,9 @@ function closePane(id) {
   p.term.dispose();
   p.el.remove();
   panes.delete(id);
+  latestAttentionItems.delete(id);
+  attentionCtrl.lastLevels.delete(id);
+  renderAttentionBar([...latestAttentionItems.values()]);
   rememberLayout();
   if (zoomed === id) zoomed = null;
   relayout();

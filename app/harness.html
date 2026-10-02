@@ -131,6 +131,15 @@
               ],
             });
 
+          case 'get_attention_queue':
+            return Promise.resolve(window.__mockAttentionQueue || (payload.paneIds || []).map(id => ({
+              pane_id: id,
+              score: 0,
+              level: 'nominal',
+              reason: 'Idle / Normal execution',
+              last_event_ts: Date.now()
+            })));
+
           default:
             return Promise.resolve(null);
         }
@@ -161,6 +170,7 @@
     <span class="brand">AgentSwarm</span>
     <span id="profiles"></span>
     <span id="muster" title="every pane, in order"></span>
+    <div id="attention-bar" class="attention-bar" title="Attention Queue"></div>
     <span id="tally"></span>
     <span id="flash"></span>
     <span class="spacer"></span>

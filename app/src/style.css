@@ -136,6 +136,160 @@ html, body {
 #tally.alert { color: var(--attn); }
 #flash { color: var(--adv); font-size: 10.5px; }
 
+#muster .lamp[data-attention="urgent"] {
+  background: var(--warn) !important;
+  box-shadow: 0 0 6px rgba(201, 114, 127, 0.6);
+}
+#muster .lamp[data-attention="action"],
+#muster .lamp[data-attention="action_needed"] {
+  background: var(--attn) !important;
+  box-shadow: 0 0 6px rgba(217, 160, 91, 0.6);
+}
+
+/* ── attention bar & triage chips ───────────────────────────────────────── */
+.attention-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 480px;
+  overflow-x: auto;
+}
+.attn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: var(--r-sm);
+  font-size: 10px;
+  font-family: var(--ui);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s var(--ease);
+  user-select: none;
+}
+.attn-chip.urgent {
+  background: rgba(201, 114, 127, 0.18);
+  border: 1px solid rgba(201, 114, 127, 0.45);
+  color: #f0a8b2;
+}
+.attn-chip.urgent:hover {
+  background: rgba(201, 114, 127, 0.28);
+  border-color: var(--warn);
+}
+.attn-chip.action {
+  background: rgba(217, 160, 91, 0.18);
+  border: 1px solid rgba(217, 160, 91, 0.45);
+  color: #f7ce99;
+}
+.attn-chip.action:hover {
+  background: rgba(217, 160, 91, 0.28);
+  border-color: var(--attn);
+}
+.attn-chip.nominal {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  cursor: default;
+  font-size: 9.5px;
+}
+.attn-chip .attn-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  font-size: 8.5px;
+  font-family: var(--mono);
+  font-weight: 700;
+}
+.attn-chip.urgent .attn-badge {
+  background: var(--warn);
+  color: #141519;
+}
+.attn-chip.action .attn-badge {
+  background: var(--attn);
+  color: #141519;
+}
+.attn-chip .attn-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--run);
+}
+
+/* ── inline pane action banner ─────────────────────────────────────────── */
+.pane-action-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 10px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+  animation: bannerSlideIn 0.18s cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes bannerSlideIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.pane-action-banner.banner-urgent {
+  background: rgba(201, 114, 127, 0.14);
+  border-bottom-color: rgba(201, 114, 127, 0.35);
+  color: #f0a8b2;
+}
+.pane-action-banner.banner-action {
+  background: rgba(217, 160, 91, 0.14);
+  border-bottom-color: rgba(217, 160, 91, 0.35);
+  color: #f7ce99;
+}
+.action-banner-text {
+  font-family: var(--ui);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.action-banner-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.action-banner-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--fg);
+  border-radius: var(--r-sm);
+  padding: 2px 8px;
+  font-size: 10px;
+  font-family: var(--ui);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s var(--ease);
+}
+.action-banner-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.action-banner-btn.primary {
+  background: var(--attn);
+  color: #141519;
+  border-color: var(--attn);
+}
+.action-banner-btn.primary:hover {
+  filter: brightness(1.1);
+}
+.action-banner-btn.danger {
+  background: var(--warn);
+  color: #fff;
+  border-color: var(--warn);
+}
+
 /* ── the grid ───────────────────────────────────────────────────────────── */
 #grid {
   height: calc(100% - 30px);
