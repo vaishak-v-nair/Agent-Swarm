@@ -140,6 +140,59 @@
               last_event_ts: Date.now()
             })));
 
+          case 'list_projects':
+            return Promise.resolve(window.__mockProjects || [{
+              id: 'proj-default',
+              name: 'agent-swarm',
+              path: CWD,
+              current_branch: 'main',
+              default_test_command: 'npm test',
+              created_at: Date.now(),
+            }]);
+
+          case 'list_agent_adapters':
+            return Promise.resolve([
+              { id: 'claude', name: 'Claude Code', executable: 'claude', installed: true, capabilities: ['launch', 'resume', 'events', 'tools', 'diffs'] },
+              { id: 'codex', name: 'OpenAI Codex', executable: 'codex', installed: true, capabilities: ['launch', 'events', 'tools'] },
+              { id: 'gemini', name: 'Gemini CLI', executable: 'gemini', installed: true, capabilities: ['launch', 'events'] },
+              { id: 'copilot', name: 'GitHub Copilot', executable: 'copilot', installed: false, capabilities: ['launch'] },
+              { id: 'opencode', name: 'OpenCode', executable: 'opencode', installed: false, capabilities: ['launch'] },
+              { id: 'powershell', name: 'PowerShell', executable: 'powershell.exe', installed: true, capabilities: ['launch'] }
+            ]);
+
+          case 'list_sessions':
+            return Promise.resolve(window.__mockSessions || []);
+
+          case 'create_task_session': {
+            const title = payload.taskTitle || (payload.prompt ? payload.prompt.slice(0, 45) : 'New Task');
+            const sess = {
+              id: 'sess-' + Math.random().toString(36).slice(2, 8),
+              project_id: payload.projectId,
+              agent_type: payload.agentType,
+              task_title: title,
+              status: 'working',
+              status_reason: 'Allocated ConPTY... starting agent process',
+              cwd: payload.cwd || CWD,
+              branch: 'main',
+              pane_id: payload.paneId || 1,
+              created_at: Date.now(),
+              attention_score: 0,
+              verification_status: 'untested',
+              verification_output: null
+            };
+            window.__mockSessions = (window.__mockSessions || []).concat(sess);
+            return Promise.resolve(sess);
+          }
+
+          case 'run_verification':
+            return Promise.resolve({
+              success: true,
+              exit_code: 0,
+              stdout: '✔ 43 tests pass (0.47s)',
+              stderr: '',
+              duration_ms: 470
+            });
+
           default:
             return Promise.resolve(null);
         }
@@ -174,14 +227,31 @@
     <span id="tally"></span>
     <span id="flash"></span>
     <span class="spacer"></span>
-    <span id="hint"><b>ctrl+shift+P</b> everything &nbsp; M timeline &nbsp; D changes &nbsp; F search &nbsp; space jump</span>
+    <span id="hint"><b>ctrl+shift+P</b> everything &nbsp; M timeline &nbsp; D changes &nbsp; ` terminal</span>
   </header>
-  <main id="board" data-layout="grid">
+
+  <!-- Ambient Floating Aurora Mesh (Layer 1) -->
+  <div id="bg-aurora" class="bg-aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-blob-1"></div>
+    <div class="aurora-blob aurora-blob-2"></div>
+    <div class="aurora-blob aurora-blob-3"></div>
+    <div class="aurora-blob aurora-blob-4"></div>
+  </div>
+
+  <!-- V2 4-Zone Application Shell -->
+  <div id="app-shell">
+    <aside id="sidebar"></aside>
+    <main id="main-workspace"></main>
+    <aside id="context-inspector"></aside>
+    <section id="terminal-drawer" class="terminal-drawer closed"></section>
+  </div>
+
+  <div id="board" data-layout="grid" style="display: none;">
     <div id="grid"></div>
     <div id="rail"></div>
     <div id="stage"></div>
     <div id="empty"></div>
-  </main>
+  </div>
 
   <div id="palette">
     <div class="pal-box">

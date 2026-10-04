@@ -2,55 +2,53 @@
 
 > **Notice to AI Agents**: This file is the single source of operational truth for project state. Review this file at the start of each session and update it before concluding.
 
-**Last Updated**: 2026-10-02  
+**Last Updated**: 2026-10-03  
 **Current Git Branch**: `main`  
-**Latest Commit**: `d0e405d` (*feat(uiux): implement 2027 agent cockpit triage queue and inline action banners*)  
-**Test Suite Health**: **91 / 91 Tests Passing (100% Green)**  
-- Rust backend: 48 passed, 0 failed (`cargo test`)
-- Frontend/Node: 43 passed, 0 failed (`npm test`)
+**Test Suite Health**: **100 / 100 Tests Passing (100% Green)**  
+- Rust backend: 54 passed, 0 failed (`cargo test`)
+- Frontend/Node: 46 passed, 0 failed (`npm test`)
 
 ---
 
 ## 1. System Architecture Snapshot
 
-AgentSwarm is a native Windows desktop cockpit designed for multi-agent supervision (Claude Code, Codex, PowerShell, custom agent swarms).
+AgentSwarm is a native desktop workspace for every AI coding agent (Claude Code, OpenAI Codex, Gemini CLI, Copilot CLI, OpenCode, Aider, PowerShell).
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        AgentSwarm Cockpit UI                           │
-│  [Muster Rail] [Attention Queue Chips] [Tally] [Keyboard Shortcuts]   │
-├──────────────────────────────────┬─────────────────────────────────────┤
-│  Pane 1 (Stage / Reading Focus)  │  Rail (Live Monitored Cards)        │
-│  ┌────────────────────────────┐  │  ┌───────────────────────────────┐  │
-│  │ ⚡ Pane Action Banner      │  │  │ #2 · claude [running 42s]     │  │
-│  │ [Approve (y)] [Reject (n)] │  │  │ peek: "Building AST tree..."  │  │
-│  ├────────────────────────────┤  │  └───────────────────────────────┘  │
-│  │ ConPTY Terminal (xterm.js) │  │  ┌───────────────────────────────┐  │
-│  │ or Semantic Flow Cards     │  │  │ #3 · test-agent [idle 1m]     │  │
-│  └────────────────────────────┘  │  └───────────────────────────────┘  │
-└──────────────────────────────────┴─────────────────────────────────────┘
-                 ▲                                     ▲
-          Tauri IPC (Webview)                   Tauri IPC (Webview)
-                 ▼                                     ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                          Rust Backend Core                             │
-│  ┌─────────────────────────┐         ┌──────────────────────────────┐  │
-│  │ ConPTY Manager (pty.rs) │         │ Transcript Watcher & Parser  │  │
-│  │ Real Windows Subprocess │         │ (Claude Code & Codex JSONL)  │  │
-│  └─────────────┬───────────┘         └──────────────┬───────────────┘  │
-│                │                                    │                  │
-│                ▼                                    ▼                  │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ SQLite Agent Event Store (store.rs)                              │  │
-│  │ Events: ToolCall, ToolResult, UserPrompt, Bell, Exit, Diff       │  │
-│  └─────────────────────────────┬────────────────────────────────────┘  │
-│                                │                                       │
-│                                ▼                                       │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ Attention Engine (attention.rs)                                  │  │
-│  │ Priority Scoring (0-100) + Half-Life Decay (tau = 45s)           │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 AgentSwarm V2 Desktop Shell                            │
+├────────────────────┬───────────────────────────────────────┬───────────────────────────┤
+│    LEFT SIDEBAR    │            MAIN WORKSPACE             │  RIGHT CONTEXT INSPECTOR  │
+│  [Project Select]  │  ┌─────────────────────────────────┐  │  • Active Project / Repo  │
+│  + New Agent Task  │  │  Home Dashboard or Session View │  │  • Git Branch & Worktree  │
+│  • Home Workspace  │  │  ┌───────────────────────────┐  │  │  • Verification Status    │
+│  • Working Changes │  │  │ Session Inception Card    │  │  │  • Working Tree Diffs     │
+│  • Unified Timeline│  │  │ Task Prompt, Agent Badge, │  │  │  • Attention Provenance   │
+│                    │  │  │ ConPTY Pane, Status Pulse │  │  │                           │
+│  AGENT SESSIONS    │  │  └───────────────────────────┘  │  │                           │
+│  • #1 Claude Code  │  │  [Conversation] [Changes]       │  │                           │
+│  • #2 Codex        │  │  [Verification] [Raw Terminal]  │  │                           │
+│  • #3 Gemini CLI   │  └─────────────────────────────────┘  │                           │
+├────────────────────┴───────────────────────────────────────┴───────────────────────────┤
+│            COLLAPSIBLE BOTTOM EXECUTION DRAWER (Real ConPTY xterm.js Terminals)        │
+│  [Agent #1] [Agent #2] [Shell #3] [+]                      Show Terminal ⌄ (`)         │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+                                     ▲
+                            Tauri IPC / ConPTY
+                                     ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              Rust Backend Core (Tauri v2)                              │
+│  ┌────────────────────────┐  ┌────────────────────────┐  ┌──────────────────────────┐  │
+│  │ Project Registry       │  │ Agent Adapter Registry │  │ Agent Session Manager    │  │
+│  │ (project.rs)           │  │ (Claude, Codex, etc.)  │  │ (session.rs)             │  │
+│  └───────────┬────────────┘  └───────────┬────────────┘  └────────────┬─────────────┘  │
+│              │                           │                            │                │
+│              ▼                           ▼                            ▼                │
+│  ┌────────────────────────┐  ┌────────────────────────┐  ┌──────────────────────────┐  │
+│  │ Windows ConPTY Subproc │  │ SQLite Event Store     │  │ Attention Engine         │  │
+│  │ (pty.rs)               │  │ (store.rs)             │  │ (attention.rs)           │  │
+│  └────────────────────────┘  └────────────────────────┘  └──────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -59,6 +57,12 @@ AgentSwarm is a native Windows desktop cockpit designed for multi-agent supervis
 
 | Milestone / Feature | Status | Description |
 |---|---|---|
+| **V2: Workspace Redesign** | Complete | "One desktop workspace for every AI coding agent" with 4-zone shell, vendor-neutral adapters, Home dashboard, and session views. |
+| **V2: Session Inception** | Complete | Replaces empty black rectangles with rich task metadata, pulse heartbeat, and immediate tab navigation. |
+| **V2: Bottom Terminal Drawer** | Complete | Collapsible execution drawer (`~` / `` ` ``) guaranteeing interaction truth with real ConPTY streams. |
+| **V2: Project Model & Registry** | Complete | First-class projects with repository path, branch tracking, and default verification runner. |
+| **V2: Multi-Agent Adapters** | Complete | First-class adapters for Claude, Codex, Gemini, Copilot, OpenCode, Aider, and native shells. |
+| **V2: Verification Engine** | Complete | First-class verification suites separating agent completion from verified correctness. |
 | **M1: Core Terminal** | Complete | Windows ConPTY terminal hosting via xterm.js & Tauri v2. |
 | **M2: Semantic Watcher** | Complete | Background JSONL transcript stream correlation for Claude Code sessions. |
 | **M3: State Machine & Peeks** | Complete | Real-time burst detection, idle vs busy heuristics, meaningful line peek extraction. |
@@ -73,6 +77,10 @@ AgentSwarm is a native Windows desktop cockpit designed for multi-agent supervis
 | **M12: Dynamic Profile Attachment** | Complete | Profile-agnostic session attachment driven by backend capabilities rather than hardcoded strings. |
 | **Grounding & Bridge Fix** | Complete | Removed hardcoded cwd fallbacks (`/home/user/...`) and fake mock harness data; real dev bridge implemented. |
 | **2027 Cockpit Attention Triage** | Complete | Top-bar `#attention-bar` triage chips, inline `.pane-action-banner` with 1-click HITL buttons, and glowing muster rail lamps. |
+| **V2: Cyber-Minimalist Visual Overhaul** | Complete | Full 4-zone CSS refinement: deep `--bg-0` surfaces, gradient-rimmed metric cards, styled launchpad grid, inception card pulse animation, premium buttons with brand glow, sidebar glass header, modal glassmorphism, native scrollbar theming. DESIGN.md token system fully applied. |
+| **V2: Architectural Refactoring** | Complete | Purged V1 generic boilerplate (`#grid`, `#rail`, `setLayout`), established headless pane creation, eliminated mock states, and restored 100% test passing functionality under V2 strict rules. Established `AGENT_RULES.md`. |
+| **V2: Animated Background & Swarm Constellation** | Complete | 3D WebGL Three.js constellation swarm with glowing multi-agent nodes, proximity laser filaments, GPU-accelerated floating ambient aurora mesh, and frosted obsidian glass surfaces across all 4 zones. |
+| **V2: Living Agent Workshop UI/UX** | Complete | Transformed AgentSwarm into an active command center: geometric SVG agent characters with state-driven styling, semantic 3D swarm activity graph with tool bursts and hover HUD, restructured Home workspace with active work stream and editorial sleeping swarm, resizable/collapsible IDE terminal drawer with drag handle and maximize mode, and auto-collapsing contextual right inspector. |
 
 ---
 
@@ -81,11 +89,11 @@ AgentSwarm is a native Windows desktop cockpit designed for multi-agent supervis
 Run before every commit:
 
 ```bash
-# 1. Rust Backend Test Suite (48 tests)
+# 1. Rust Backend Test Suite (54 tests)
 cd app/src-tauri
 cargo test
 
-# 2. Frontend / Node Test Suite (43 tests)
+# 2. Frontend / Node Test Suite (46 tests)
 cd ../
 npm test
 
@@ -93,6 +101,7 @@ npm test
 npm run dev
 # Browser verification at http://localhost:1421/harness.html
 ```
+
 
 ---
 

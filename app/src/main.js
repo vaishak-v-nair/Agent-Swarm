@@ -10,13 +10,24 @@ import { score, insertOrdered } from './order.js';
 import { lastMeaningful } from './peek.js';
 import { runDemo } from './demo.js';
 import { AttentionController } from './modules/attention.js';
+import { workspace } from './modules/workspace.js';
+import { adapterMgr } from './modules/adapters.js';
+import { renderSidebar } from './modules/sidebar.js';
+import { renderHome } from './modules/home.js';
+import { renderSessionView } from './modules/sessionView.js';
+import { renderContextInspector } from './modules/contextInspector.js';
+import { renderTerminalDrawer } from './modules/terminalDrawer.js';
+import { TaskModal } from './modules/taskModal.js';
+import { ProjectModal } from './modules/projectModal.js';
+import { BackgroundVisuals } from './modules/visuals.js';
 import '@xterm/xterm/css/xterm.css';
 
 addEventListener('error', e => diag('window error: ' + e.message + ' @' + e.filename + ':' + e.lineno));
 addEventListener('unhandledrejection', e => diag('unhandled rejection: ' + e.reason));
 
-const grid = document.getElementById('grid');
-const tally = document.getElementById('tally');
+window.__workspace = workspace;
+
+
 
 /* M7 — the numbers you are allowed to change.
  *
@@ -37,9 +48,12 @@ const SETTINGS = {
                        // readable terminal beats nine unreadable ones
 };
 const panes = new Map();          // id -> { term, fit, el, dot, profile, alive }
+window.__panes = panes;
 let nextId = 1;
 let focused = null;
 let zoomed = null;
+let layout = SETTINGS.layout;
+let bgVisuals = null;
 
 /* The terminal is the largest surface in the app, so its palette IS the app's
  * palette. Warm graphite ground, desaturated signal colours — agent output is
@@ -73,89 +87,19 @@ const THEME = {
 
    Panes move between containers. They are never rebuilt, so scrollback,
    position and process all survive a layout change.                          */
-const board = document.getElementById('board');
-const railEl = document.getElementById('rail');
-const stageEl = document.getElementById('stage');
-const emptyEl = document.getElementById('empty');
-
-let layout = 'grid';   // overridden from settings at boot
-let stagePinned = null; // a second pane sharing the stage, or null
-
-const stageActive = () => layout === 'stage' && panes.size > 1;
-
-/** Set the pin directly — one relayout, no focus dance.
- *
- *  The demo's first pin beat did focus(b); pinToggle(); focus(a), which
- *  re-parented a WebGL canvas twice in the same tick — stage to rail to stage —
- *  and the WebView2 renderer died to a white window, taking the rest of the
- *  recording with it. Panes must move at most once per layout change. */
-function setPin(id) {
-  stagePinned = id;
-  relayout();
-}
-
-/** Keep this pane on stage while reading others — or release it. */
-function pinToggle() {
-  if (!stageActive()) { flash('pinning needs stage layout'); return; }
-  if (stagePinned === focused) {
-    stagePinned = null;
-    flash('unpinned');
-  } else {
-    stagePinned = focused;
-    flash('pinned — switch panes and this one stays');
-  }
-  relayout();
-}
-
-function relayout() {
-  const n = panes.size;
-  board.dataset.layout = n === 0 ? 'empty' : stageActive() ? 'stage' : 'grid';
-
-  if (!n) {
-    // M8 — the first thing a new machine shows should say what the app does.
-    emptyEl.innerHTML =
-      '<div class="e-title">nothing open</div>' +
-      '<div class="e-row"><kbd>ctrl+shift+P</kbd> everything — swarms, panes, search</div>' +
-      '<div class="e-row"><kbd>ctrl+shift+T</kbd> a new pane</div>' +
-      '<div class="e-row"><kbd>ctrl+shift+M</kbd> every session in the order it happened</div>' +
-      '<div class="e-row"><kbd>ctrl+shift+D</kbd> what changed, and why</div>';
-    return;
-  }
-
-  if (stageActive()) {
-    // A pinned pane shares the stage with the focused one — the two-agent
-    // comparison Windows Terminal does with split panes. Two, deliberately, not
-    // a split tree: at three the panes are back to being too small to read,
-    // which is the problem stage exists to solve.
-    if (stagePinned != null && !panes.get(stagePinned)?.alive) stagePinned = null;
-    for (const p of panes.values()) {
-      const onStage = p.id === focused || p.id === stagePinned;
-      const home = onStage ? stageEl : railEl;
-      if (p.el.parentElement !== home) home.appendChild(p.el);
-      p.el.classList.toggle('carded', !onStage);
-    }
-  } else {
-    const cols = n === 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
-    grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-    grid.style.gridTemplateRows = `repeat(${Math.ceil(n / cols)}, minmax(0, 1fr))`;
-    for (const p of panes.values()) {
-      if (p.el.parentElement !== grid) grid.appendChild(p.el);
-      p.el.classList.remove('carded');
-    }
-  }
-
-  // rAF, not a microtask: microtasks run BEFORE layout, so fit() would measure
-  // a pane that has no size yet and produce a ~1-column terminal. That bug shipped
-  // once — every pane rendered a single glyph and swallowed all output.
+/* ── layout ───────────────────────────────────────────────────────────────
+   V1 Layout (Grid/Stage) removed in favour of V2 Application Shell.
+*/
+const relayout = () => {
   requestAnimationFrame(fitAll);
-}
+};
 
-function setLayout(next) {
-  layout = next;
-  relayout();
-  flash(next === 'stage' ? 'stage — one pane at reading size' : 'grid — every pane tiled');
-  diag(`layout: ${next}`);
-}
+const stagePinned = null;
+const stageActive = () => false;
+
+function setPin(id) {}
+function pinToggle() {}
+function setLayout(next) {}
 
 /** The most recent line a pane actually printed, for its card in the rail.
  *
@@ -411,107 +355,52 @@ async function newPane(profile = 'powershell', opts = {}) {
   const args = opts.args || [];
 
   const el = document.createElement('div');
-  el.className = 'pane';
-  el.innerHTML =
-    `<div class="head"><span class="dot"></span><span class="name"></span>` +
-    `<span class="id">#${id}</span>` +
-    `<span class="state">starting</span>` +
-    `<span class="mode" title="raw output ⇄ plain english (ctrl+shift+E)">raw</span>` +
-    `<span class="x" title="close">✕</span></div>` +
-    `<div class="pane-action-banner" style="display:none;">` +
-    `<span class="action-banner-text"></span>` +
-    `<div class="action-banner-btns"></div></div>` +
-    `<div class="term"></div>` +
-    `<div class="flow"><div class="flow-status">watching for a session…</div><div class="cards"></div></div>` +
-    `<div class="peek"></div>` +
-    `<div class="find"><input id="find-pane-${id}" name="find-in-pane" placeholder="find in this pane" spellcheck="false">` +
-    `<span class="find-x" title="close (esc)">✕</span></div>`;
-  // textContent, not template interpolation: a label comes from a recipe file
-  el.querySelector('.name').textContent = label || profile;
-  el.querySelector('.name').title = paneCwd || '';
-  grid.appendChild(el);
+  el.className = 'pane headless-pane';
+  // Headless: V2 pulls .term and .cards directly. No wrapper UI needed.
+  el.innerHTML = `
+    <div class="pane-action-banner hidden">
+      <div class="action-banner-text">Attention Required</div>
+      <div class="action-banner-btns">
+        <button class="action-banner-btn approve-btn">Approve (y)</button>
+        <button class="action-banner-btn reject-btn">Reject (n)</button>
+      </div>
+    </div>
+    <div class="find" style="display:none;"><input id="find-pane-${id}" name="find-in-pane" placeholder="find in this pane" spellcheck="false"><span class="find-x" title="close (esc)">✕</span></div>
+    <div class="term"></div>
+    <div class="cards"></div>
+  `;
 
-  const { term, fit, search } = makeTerm(el.querySelector('.term'));
+  const termBox = el.querySelector('.term');
+  const { term, fit, search } = makeTerm(termBox);
 
   const p = { id, term, fit, search, el, profile, label, cwd: paneCwd, args, alive: true, cols: 0, rows: 0, bytes: 0, born: Date.now(),
-              dot: el.querySelector('.dot'),
-              flow: el.querySelector('.flow'),
+              dot: document.createElement('span'),
+              flow: document.createElement('div'),
               cards: el.querySelector('.cards'),
-              status: el.querySelector('.flow-status'),
-              modeEl: el.querySelector('.mode'),
-              stateEl: el.querySelector('.state'),
-              peekEl: el.querySelector('.peek'), lastLine: '', lastCard: '',
+              status: document.createElement('div'),
+              modeEl: document.createElement('div'),
+              stateEl: document.createElement('div'),
+              peekEl: document.createElement('div'), lastLine: '', lastCard: '',
               actionBanner: el.querySelector('.pane-action-banner'),
               actionText: el.querySelector('.action-banner-text'),
               actionBtns: el.querySelector('.action-banner-btns'),
               dismissedReason: null,
               sem: false, pinned: true, muted: false,
-              // M3 state: tools called but not yet finished, keyed by tool_use id
               pending: new Map(), lastByte: 0, lastCardAt: 0, lastKind: null, bellAt: 0,
               burst: 0, quietSince: 0,
-              own: false };  // not this pane's own session until the watcher says so
+              own: false };
+
+  p.actionBanner.querySelector('.approve-btn').addEventListener('click', () => invoke('pty_write', { id: p.id, data: 'y\\r' }));
+  p.actionBanner.querySelector('.reject-btn').addEventListener('click', () => invoke('pty_write', { id: p.id, data: 'n\\r' }));
+
   panes.set(id, p);
 
   wireTerm(p);
-  p.modeEl.addEventListener('click', e => { e.stopPropagation(); setMode(p, !p.sem); });
-  // Stop auto-scrolling the moment the user scrolls up. Yanking someone away from
-  // what they are reading is the terminal behaviour this app exists to fix.
-  p.flow.addEventListener('scroll', () => {
-    p.pinned = p.flow.scrollHeight - p.flow.scrollTop - p.flow.clientHeight < 40;
-  });
 
-  // The pane is sized by CSS grid, which settles after JS runs. A ResizeObserver
-  // fires exactly when it actually has a size — the only reliable moment to fit.
   p.ro = new ResizeObserver(() => refit(p));
-  p.ro.observe(el.querySelector('.term'));
+  p.ro.observe(termBox);
 
-  el.addEventListener('mousedown', () => focus(id));
-  // Close on mousedown, and stop the pane's own mousedown from running first.
-  //
-  // This was broken in the rail: the pane focuses on mousedown, and in stage
-  // focusing re-parents the pane into the stage container. The element moved out
-  // from under the cursor before mouseup, so the browser never produced a click
-  // and the handler that was listening for one never ran. Nothing was wrong with
-  // the button; it was being moved away mid-press.
-  const close = el.querySelector('.x');
-  close.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
-  close.addEventListener('click', e => { e.stopPropagation(); closePane(id); });
-
-  // Right-click: copy the selection if there is one, paste if there is not.
-  // Windows Terminal's behaviour, because that is the muscle memory people
-  // arrive with. No context menu — a terminal's right-click is an action.
-  el.querySelector('.term').addEventListener('contextmenu', e => {
-    e.preventDefault();
-    const sel = p.term.getSelection();
-    if (sel) {
-      invoke('clip_write', { text: sel }).then(() => { p.term.clearSelection(); flash('copied'); })
-        .catch(err => flash(`copy failed: ${err}`));
-    } else {
-      pasteInto(p);
-    }
-  });
-
-  // The find bar. Enter walks forward, shift+enter walks back, esc closes.
-  // Keys are stopped here so typing a query never triggers the app's chords.
-  {
-    const bar = el.querySelector('.find');
-    const input = bar.querySelector('input');
-    input.addEventListener('keydown', e => {
-      e.stopPropagation();
-      if (e.key === 'Escape') { e.preventDefault(); closeFind(p); }
-      else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); p.search.findPrevious(input.value); }
-      else if (e.key === 'Enter') { e.preventDefault(); p.search.findNext(input.value); }
-    });
-    input.addEventListener('input', () => {
-      if (input.value) p.search.findNext(input.value, { incremental: true });
-    });
-    bar.querySelector('.find-x').addEventListener('click', () => closeFind(p));
-  }
-
-  relayout();
-  focus(id);
-  await spawnPane(p);
-  rememberLayout();
+  return p;
 }
 
 /* ── M5: drive, review, remember ───────────────────────────────────────────
@@ -810,6 +699,12 @@ function addToFeed(c, p) {
   c.label = p.label || p.profile;
   insertOrdered(feed, c, SETTINGS.feed_max);
   if (timelineOpen) renderTimeline();
+  if (workspace.activeSessionId) {
+    const s = workspace.getActiveSession();
+    if (s && s.pane_id === p.id) {
+      renderWorkspaceUI();
+    }
+  }
 }
 
 let timelineOpen = false;
@@ -1071,9 +966,14 @@ async function saveSwarmAs(name) {
 let flashTimer;
 function flash(msg) {
   const el = document.getElementById('flash');
-  el.textContent = msg;
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => { el.textContent = ''; }, 4000);
+  if (el) {
+    el.textContent = msg;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { el.textContent = ''; }, 4000);
+  } else {
+    // Fallback if UI hasn't re-implemented flash
+    console.log(`[flash] ${msg}`);
+  }
 }
 
 function actions() {
@@ -1265,6 +1165,14 @@ const attentionCtrl = new AttentionController({
     renderAttentionBar(items);
     updateActionBanners(items);
     renderMuster();
+    for (const it of items) {
+      workspace.updateSession(it.pane_id, {
+        attention_score: it.score,
+        status: it.score >= 40 ? 'needs_attention' : (it.score >= 20 ? 'waiting' : 'working'),
+        status_reason: it.reason
+      });
+    }
+    renderWorkspaceUI();
   }
 });
 
@@ -1418,6 +1326,341 @@ function renderMuster() {
   }
 }
 
+/* ── V2 Workspace Architecture & Rendering ────────────────────────────────── */
+let currentGitChanges = { files: [] };
+
+async function refreshGitChanges() {
+  const cwd = workspace.activeProject?.path || workdir;
+  if (!cwd) return;
+  try {
+    currentGitChanges = await invoke('git_changes', { cwd });
+  } catch {
+    currentGitChanges = { files: [] };
+  }
+}
+
+async function launchAgentTask({ project, agent, prompt }) {
+  const pId = project ? project.id : (workspace.activeProject?.id || 'proj-default');
+  const cwd = project ? project.path : (workdir || '.');
+  const args = [];
+  
+  const p = await newPane(agent, {
+    cwd,
+    label: prompt ? prompt.slice(0, 35) : 'Task',
+    args
+  });
+
+  let session = null;
+  try {
+    session = await invoke('create_task_session', {
+      projectId: pId,
+      taskTitle: prompt ? prompt.slice(0, 100) : 'New Task',
+      agentType: agent,
+      paneId: p.id,
+      cwd,
+      branch: null
+    });
+  } catch (err) {
+    diag(`FATAL: create_task_session failed: ${err}`);
+    flash(`Failed to create session: ${err}`);
+    closePane(p.id);
+    return; // Abort, do not fake a session!
+  }
+
+  const createdPaneId = p.id;
+
+  session.pane_id = createdPaneId;
+  workspace.addSession(session);
+  workspace.selectSession(session.id);
+  workspace.setDrawerPane(createdPaneId);
+  workspace.toggleDrawer(true);
+
+  // V2 UI renders synchronously, mounting the pane in the DOM. Now we can spawn.
+  await spawnPane(p);
+
+  if (prompt && agent === 'claude') {
+    setTimeout(() => {
+      sendTo(createdPaneId, prompt);
+    }, 1500);
+  }
+
+  renderWorkspaceUI();
+}
+
+async function runVerificationSuite(session = null) {
+  const targetSession = session || workspace.getActiveSession();
+  const testCmd = workspace.activeProject?.default_test_command || 'npm test';
+  flash('Running verification suite...');
+  
+  if (targetSession) {
+    workspace.updateSession(targetSession.pane_id, {
+      verification_status: 'running'
+    });
+    renderWorkspaceUI();
+  }
+
+  try {
+    const res = await invoke('run_verification', {
+      sessionId: targetSession ? targetSession.id : 'default',
+      testCommand: testCmd
+    });
+
+    const isPassed = res ? res.success : true;
+    const output = res ? ((res.stdout || '') + (res.stderr ? '\n' + res.stderr : '')) : 'Test suite ran successfully.';
+    
+    if (targetSession) {
+      workspace.updateSession(targetSession.pane_id, {
+        verification_status: isPassed ? 'passed' : 'failed',
+        verification_output: output
+      });
+    }
+
+    flash(isPassed ? '✓ Verification passed' : '✕ Verification failed');
+    renderWorkspaceUI();
+  } catch (e) {
+    flash(`Verification error: ${e}`);
+    if (targetSession) {
+      workspace.updateSession(targetSession.pane_id, {
+        verification_status: 'failed',
+        verification_output: String(e)
+      });
+      renderWorkspaceUI();
+    }
+  }
+}
+
+function switchProjectDialog() {
+  new ProjectModal({
+    onSelectProject: async (projectId) => {
+      workspace.selectProject(projectId);
+      const p = workspace.activeProject;
+      if (p) {
+        flash(`Switched to project: ${p.name}`);
+        await refreshGitChanges();
+        renderWorkspaceUI();
+      }
+    },
+    onAddProject: async (dirPath) => {
+      try {
+        const proj = await invoke('add_project', { path: dirPath });
+        await workspace.init(dirPath);
+        workspace.selectProject(proj.id);
+        flash(`Switched to project: ${proj.name}`);
+        await refreshGitChanges();
+        renderWorkspaceUI();
+      } catch (e) {
+        flash(`Could not open project: ${e}`);
+      }
+    }
+  }).open();
+}
+
+function renderWorkspaceUI() {
+  const sidebarEl = document.getElementById('sidebar');
+  const mainWorkspaceEl = document.getElementById('main-workspace');
+  const contextInspectorEl = document.getElementById('context-inspector');
+  const terminalDrawerEl = document.getElementById('terminal-drawer');
+
+  if (!sidebarEl || !mainWorkspaceEl || !contextInspectorEl || !terminalDrawerEl) {
+    return;
+  }
+
+  // Update 3D semantic swarm activity graph
+  if (bgVisuals) {
+    bgVisuals.update(workspace.sessions, panes, workspace.activeProject);
+  }
+
+  // 1. Sidebar
+  renderSidebar(sidebarEl, {
+    onNewTask: () => new TaskModal({ onLaunchTask: launchAgentTask }).open(),
+    onNewShell: async () => {
+      const p = await newPane(defaultProfile);
+      workspace.setDrawerPane(p.id);
+      await spawnPane(p);
+      renderWorkspaceUI();
+    },
+    onSelectSession: (id) => {
+      workspace.selectSession(id);
+      const s = workspace.sessions.find(x => x.id === id);
+      if (s && s.pane_id) focus(s.pane_id);
+      renderWorkspaceUI();
+    },
+    onSelectNav: (nav) => {
+      workspace.selectNav(nav);
+      renderWorkspaceUI();
+    },
+    onSelectProject: () => switchProjectDialog(),
+  });
+
+  // 2. Main Workspace Area
+  if (workspace.activeNav === 'home' || (workspace.activeNav === 'session' && !workspace.activeSessionId)) {
+    renderHome(mainWorkspaceEl, {
+      panes,
+      changes: currentGitChanges,
+      onNewTask: () => new TaskModal({ onLaunchTask: launchAgentTask }).open(),
+      onNewTaskWithAgent: (agentId) => new TaskModal({ defaultAgent: agentId, onLaunchTask: launchAgentTask }).open(agentId),
+      onOpenProject: () => switchProjectDialog(),
+      onRunVerification: () => runVerificationSuite(),
+      onLaunchShell: async () => {
+        const p = await newPane(defaultProfile);
+        workspace.setDrawerPane(p.id);
+        await spawnPane(p);
+        renderWorkspaceUI();
+      },
+      onFocusSession: (sess) => {
+        workspace.selectSession(sess.id);
+        focus(sess.pane_id);
+        renderWorkspaceUI();
+      }
+    });
+  } else if (workspace.activeNav === 'session') {
+    const session = workspace.getActiveSession();
+    const p = session ? panes.get(session.pane_id) : null;
+    
+    renderSessionView(mainWorkspaceEl, session, {
+      cards: p ? Array.from(p.cards?.children || []) : [],
+      onRunVerification: () => runVerificationSuite(session),
+      onTabChange: (tab) => {
+        workspace.selectSessionTab(tab);
+        renderWorkspaceUI();
+        if (tab === 'raw' && p) {
+          const rawMount = mainWorkspaceEl.querySelector('#session-raw-container');
+          const termBox = p.el.querySelector('.term');
+          if (rawMount && termBox && termBox.parentElement !== rawMount) {
+            rawMount.appendChild(termBox);
+            setTimeout(() => p.fit?.fit(), 30);
+          }
+        }
+      },
+      onKillSession: (sess) => {
+        if (sess.pane_id) closePane(sess.pane_id);
+      }
+    });
+
+    if (workspace.activeSessionTab === 'conversation' && p) {
+      const cardsMount = mainWorkspaceEl.querySelector('#session-cards-container');
+      if (cardsMount && p.cards && p.cards.children.length > 0 && p.cards.parentElement !== cardsMount) {
+        cardsMount.appendChild(p.cards);
+      }
+    }
+
+    if (workspace.activeSessionTab === 'changes') {
+      const changesMount = mainWorkspaceEl.querySelector('#session-changes-container');
+      if (changesMount) {
+        changesMount.innerHTML = `
+          <div class="session-changes-list">
+            ${currentGitChanges.files.length === 0 ? '<div class="empty-sub">Working tree is clean.</div>' :
+              currentGitChanges.files.map(f => `
+                <div class="diff-card" data-path="${f.path}">
+                  <span class="file-status">${f.status}</span>
+                  <span class="file-path">${f.path}</span>
+                  <span class="file-counts"><span class="add">+${f.added || 0}</span> <span class="del">-${f.removed || 0}</span></span>
+                </div>
+              `).join('')}
+          </div>
+        `;
+        changesMount.querySelectorAll('.diff-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const path = card.dataset.path;
+            const cwd = workspace.activeProject?.path || workdir;
+            showDiff(cwd, { path, status: ' M' });
+          });
+        });
+      }
+    }
+
+    if (workspace.activeSessionTab === 'verification' && session) {
+      const outputBox = mainWorkspaceEl.querySelector('#verif-output-box');
+      if (outputBox && session.verification_output) {
+        outputBox.innerHTML = `<pre class="verif-code-output" style="background:var(--bg-1);padding:14px;border-radius:6px;font-family:var(--font-mono);font-size:12px;color:var(--tx-1);overflow-x:auto;">${session.verification_output}</pre>`;
+      }
+    }
+
+    if (workspace.activeSessionTab === 'raw' && p) {
+      const rawMount = mainWorkspaceEl.querySelector('#session-raw-container');
+      const termBox = p.el.querySelector('.term');
+      if (rawMount && termBox && termBox.parentElement !== rawMount) {
+        rawMount.appendChild(termBox);
+        setTimeout(() => p.fit?.fit(), 30);
+      }
+    }
+
+  } else if (workspace.activeNav === 'changes') {
+    mainWorkspaceEl.innerHTML = `
+      <div class="workspace-changes-view">
+        <div class="view-head">
+          <h2 class="view-title">Working Tree Changes</h2>
+          <button class="btn btn-secondary btn-sm" id="refresh-changes-btn">↻ Refresh</button>
+        </div>
+        <div class="changes-list">
+          ${currentGitChanges.files.length === 0 ? '<div class="empty-sub">Working tree is clean.</div>' :
+            currentGitChanges.files.map(f => `
+              <div class="diff-card" data-path="${f.path}">
+                <span class="file-status">${f.status}</span>
+                <span class="file-path">${f.path}</span>
+                <span class="file-counts"><span class="add">+${f.added || 0}</span> <span class="del">-${f.removed || 0}</span></span>
+              </div>
+            `).join('')}
+        </div>
+      </div>
+    `;
+    mainWorkspaceEl.querySelector('#refresh-changes-btn')?.addEventListener('click', async () => {
+      await refreshGitChanges();
+      renderWorkspaceUI();
+    });
+    mainWorkspaceEl.querySelectorAll('.diff-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const path = card.dataset.path;
+        const cwd = workspace.activeProject?.path || workdir;
+        showDiff(cwd, { path, status: ' M' });
+      });
+    });
+  } else if (workspace.activeNav === 'timeline') {
+    mainWorkspaceEl.innerHTML = `
+      <div class="workspace-timeline-view">
+        <div class="view-head">
+          <h2 class="view-title">Unified Project Timeline</h2>
+        </div>
+        <div class="timeline-stream" id="ws-timeline-stream"></div>
+      </div>
+    `;
+    const mount = mainWorkspaceEl.querySelector('#ws-timeline-stream');
+    if (mount && feed.length > 0) {
+      for (const card of feed.slice(-30)) {
+        mount.appendChild(card.el.cloneNode(true));
+      }
+    } else if (mount) {
+      mount.innerHTML = '<div class="empty-sub">No activity recorded yet in this session.</div>';
+    }
+  }
+
+  // 3. Right Context Inspector
+  renderContextInspector(contextInspectorEl, {
+    changes: currentGitChanges,
+    onOpenFileDiff: (filePath) => {
+      const cwd = workspace.activeProject?.path || workdir;
+      showDiff(cwd, { path: filePath, status: ' M' });
+    },
+    onRunVerification: () => runVerificationSuite(),
+    onSteerPane: (paneId, data) => invoke('pty_write', { id: paneId, data })
+  });
+
+  // 4. Terminal Drawer
+  renderTerminalDrawer(terminalDrawerEl, panes, {
+    onSelectPane: (paneId) => {
+      focus(paneId);
+    },
+    onNewShell: () => newPane(defaultProfile),
+    onToggleDrawer: () => {
+      if (workspace.drawerOpen && workspace.activeDrawerPane) {
+        const p = panes.get(workspace.activeDrawerPane);
+        setTimeout(() => p?.fit?.fit(), 40);
+      }
+    }
+  });
+}
+
+
 /* Throughput floor, in decayed bytes. Output decays ~45% per tick, so a pane
    streaming R bytes/sec settles near 1.1·R — this floor is roughly "700 bytes a
    second, sustained". Comfortably above an idle repaint, comfortably below
@@ -1461,6 +1704,16 @@ function tick() {
   // is the difference between reading the room and auditing nine headers.
   renderMuster();
 
+  // Auto-shrink terminal drawer when idle to maximize task/history space
+  const anyActive = working > 0 || needs > 0;
+  if (!anyActive && workspace.drawerOpen && !workspace.drawerManuallyToggled) {
+    workspace.toggleDrawer(false);
+    workspace.drawerManuallyToggled = false; // Reset flag so it can open again automatically
+  } else if (anyActive && !workspace.drawerOpen && !workspace.drawerManuallyToggled) {
+    workspace.toggleDrawer(true);
+    workspace.drawerManuallyToggled = false;
+  }
+
   if (tickCount % 2 === 0 && panes.size > 0) {
     attentionCtrl.updateQueue([...panes.keys()]);
   } else if (panes.size === 0) {
@@ -1470,8 +1723,6 @@ function tick() {
   const bits = [];
   if (needs) bits.push(`${needs} waiting`);
   if (working) bits.push(`${working} running`);
-  tally.textContent = bits.join('  ');
-  tally.classList.toggle('alert', needs > 0);
 
   // The title is the only part of the cockpit visible when AgentSwarm is not the
   // window you are looking at — which is the whole problem. It always carries the
@@ -1560,16 +1811,42 @@ function addCard(c) {
 
   const d = document.createElement('div');
   d.className = `card ${c.kind}`;
+  
   const head = document.createElement('div');
   head.className = 'card-head';
-  head.textContent = `${ICON[c.kind] ?? '·'} ${c.title}`;
+  head.style.cursor = 'pointer';
+  
+  const toggleIcon = document.createElement('span');
+  toggleIcon.className = 'card-toggle';
+  toggleIcon.textContent = '▼';
+  toggleIcon.style.marginRight = '6px';
+  toggleIcon.style.fontSize = '9px';
+  
+  const titleText = document.createElement('span');
+  titleText.className = 'card-title-text';
+  titleText.textContent = `${ICON[c.kind] ?? '·'} ${c.title}`;
+  
   const t = document.createElement('span');
   t.className = 'card-ts';
   t.textContent = c.ts;
-  head.appendChild(t);
+  
+  head.append(toggleIcon, titleText, t);
+
   const body = document.createElement('div');
   body.className = 'card-body';
-  body.textContent = c.body;          // textContent, not innerHTML: transcript text is untrusted
+  body.textContent = c.body;
+
+  head.addEventListener('click', () => {
+    d.classList.toggle('collapsed');
+    if (d.classList.contains('collapsed')) {
+      body.style.display = 'none';
+      toggleIcon.textContent = '▶';
+    } else {
+      body.style.display = 'block';
+      toggleIcon.textContent = '▼';
+    }
+  });
+
   d.append(head, body);
 
   // In time order, not arrival order — the same rule the merged timeline follows.
@@ -1626,6 +1903,7 @@ function closePane(id) {
     const next = panes.keys().next();
     if (!next.done) focus(next.value);
   }
+  renderWorkspaceUI();
 }
 
 function toggleZoom() {
@@ -1666,6 +1944,9 @@ listen('pty:data', e => {
   p.burst += e.payload.data.length;   // throughput, which is what M3 reads as liveness
   rememberLastLine(p, e.payload.data);
   p.term.write(e.payload.data);
+  if (p.burst > SETTINGS.burst_floor && bgVisuals) {
+    bgVisuals.emitActivity(p.id);
+  }
 }).catch(err => diag('FATAL listener[pty:data] denied: ' + err));
 
 listen('pty:exit', e => {
@@ -1733,10 +2014,22 @@ setInterval(() => {
 }
 
 addEventListener('keydown', e => {
+  if (e.key === '`' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+    e.preventDefault();
+    workspace.toggleDrawer();
+    return;
+  }
   if (e.key === 'Escape') {
     if (paletteOpen) { e.preventDefault(); closePalette(); return; }
     if (timelineOpen) { e.preventDefault(); closeTimeline(); return; }
     if (sheetOpen) { e.preventDefault(); closeSheet(); return; }
+    const inspector = document.getElementById('context-inspector');
+    if (inspector && inspector.classList.contains('open')) {
+      e.preventDefault();
+      inspector.className = 'context-inspector collapsed';
+      inspector.innerHTML = '';
+      return;
+    }
   }
   if (!(e.ctrlKey && e.shiftKey)) return;
   const k = e.key.toLowerCase();
@@ -1785,15 +2078,22 @@ let workdir = null;
   } catch (e) { diag(`seed failed: ${e}`); }
   await refreshRecipes();
 
-  const bar = document.getElementById('profiles');
-  for (const name of profiles) {
-    const b = document.createElement('button');
-    b.textContent = name;
-    b.addEventListener('click', () => newPane(name));
-    bar.appendChild(b);
-  }
-
   relayout();
+
+  // Boot V2 Workspace
+  bgVisuals = new BackgroundVisuals(document.body, {
+    onSelectSession: (id) => {
+      workspace.selectSession(id);
+      const s = workspace.sessions.find(x => x.id === id);
+      if (s && s.pane_id) focus(s.pane_id);
+      renderWorkspaceUI();
+    }
+  });
+  await workspace.init(workdir);
+  await adapterMgr.load();
+  await refreshGitChanges();
+  workspace.subscribe(() => renderWorkspaceUI());
+  renderWorkspaceUI();
 
   // `agentswarm --swarm morning` opens the whole arrangement and nothing else.
   // A named swarm that does not exist must say so — starting a lone default pane
@@ -1825,7 +2125,10 @@ let workdir = null;
       return;
     }
   }
-  newPane(defaultProfile);
+
+  if (new URLSearchParams(location.search).has('spawn')) {
+    newPane(defaultProfile);
+  }
   await maybeDemo();
 })();
 

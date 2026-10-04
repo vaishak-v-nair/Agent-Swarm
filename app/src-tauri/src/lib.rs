@@ -1,9 +1,12 @@
+pub mod adapter;
 pub mod attention;
 pub mod doctor;
 pub mod event;
 pub mod git;
+pub mod project;
 pub mod pty;
 pub mod recipes;
+pub mod session;
 pub mod settings;
 pub mod steer;
 pub mod store;
@@ -78,6 +81,7 @@ pub struct AppState {
     pub panes: Arc<Panes>,
     pub store: Arc<store::EventStore>,
     pub session_token: String,
+    pub session_mgr: Arc<session::SessionManager>,
 }
 
 #[tauri::command]
@@ -544,6 +548,93 @@ fn get_attention_queue(
     attention::AttentionScorer::rank_panes(&pane_ids, &state.store, now_ms)
 }
 
+#[tauri::command]
+fn list_projects(cwd: Option<String>) -> Vec<project::Project> {
+    let here = cwd.unwrap_or_else(default_cwd);
+    project::ProjectRegistry::list(&here)
+}
+
+#[tauri::command]
+fn add_project(path: String) -> project::Project {
+    project::ProjectRegistry::add(&path)
+}
+
+#[tauri::command]
+fn list_agent_adapters() -> Vec<adapter::AdapterInfo> {
+    adapter::AdapterRegistry::detect_all()
+}
+
+#[tauri::command]
+fn list_sessions(state: State<AppState>) -> Vec<session::AgentSession> {
+    state.session_mgr.list()
+}
+
+#[tauri::command]
+fn create_task_session(
+    state: State<AppState>,
+    project_id: String,
+    task_title: String,
+    agent_type: String,
+    pane_id: u32,
+    cwd: String,
+    branch: Option<String>,
+) -> session::AgentSession {
+    state.session_mgr.create(project_id, task_title, agent_type, pane_id, cwd, branch)
+}
+
+#[tauri::command]
+fn update_session_status(
+    state: State<AppState>,
+    pane_id: u32,
+    status: String,
+    reason: String,
+    score: u32,
+) -> Option<session::AgentSession> {
+    let stat = match status.as_str() {
+        "starting" => session::SessionStatus::Starting,
+        "working" => session::SessionStatus::Working,
+        "needs_attention" => session::SessionStatus::NeedsAttention,
+        "completed" => session::SessionStatus::Completed,
+        "failed" => session::SessionStatus::Failed,
+        "paused" => session::SessionStatus::Paused,
+        _ => session::SessionStatus::Working,
+    };
+    state.session_mgr.update_status(pane_id, stat, reason, score)
+}
+
+#[tauri::command]
+async fn run_verification(cwd: String, command: Option<String>) -> Result<String, String> {
+    let cmd_str = command.unwrap_or_else(|| {
+        project::Project::from_path(&cwd)
+            .default_test_command
+            .unwrap_or_else(|| "npm test".to_string())
+    });
+
+    let parts: Vec<&str> = cmd_str.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err("empty verification command".into());
+    }
+
+    let program = parts[0];
+    let args = &parts[1..];
+
+    let out = std::process::Command::new(program)
+        .current_dir(&cwd)
+        .args(args)
+        .output()
+        .map_err(|e| format!("failed to execute {cmd_str}: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+
+    if out.status.success() {
+        Ok(combined)
+    } else {
+        Err(format!("Verification failed with status {}:\n{combined}", out.status))
+    }
+}
+
 fn get_event_store_path() -> std::path::PathBuf {
     if let Ok(base) = std::env::var("LOCALAPPDATA") {
         let dir = std::path::PathBuf::from(base).join("agentswarm");
@@ -635,10 +726,13 @@ pub fn run() {
                 store::EventStore::in_memory().expect("in-memory event store")
             }));
 
+            let session_mgr = Arc::new(session::SessionManager::new());
+
             app.manage(AppState {
                 panes,
                 store,
                 session_token,
+                session_mgr,
             });
             Ok(())
         })
@@ -675,7 +769,14 @@ pub fn run() {
             event_query_errors,
             get_session_token,
             steer_pane,
-            get_attention_queue
+            get_attention_queue,
+            list_projects,
+            add_project,
+            list_agent_adapters,
+            list_sessions,
+            create_task_session,
+            update_session_status,
+            run_verification
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentSwarm");

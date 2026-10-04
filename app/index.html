@@ -7,27 +7,23 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <header id="bar">
-      <span class="brand">AgentSwarm</span>
-      <span id="profiles"></span>
-      <!-- The muster rail: one lamp per pane, in pane order. Nine sessions
-           read in a glance instead of nine headers audited one at a time. -->
-      <span id="muster" title="every pane, in order"></span>
-      <div id="attention-bar" class="attention-bar" title="Attention Queue"></div>
-      <span id="tally"></span>
-      <span id="flash"></span>
-      <span class="spacer"></span>
-      <span id="hint"><b>ctrl+shift+P</b> everything &nbsp; M timeline &nbsp; D changes &nbsp; F search &nbsp; space jump</span>
-    </header>
-    <!-- Two layouts over the same panes. Grid tiles them evenly; stage gives
-         the one you are reading the room and keeps the rest as live cards.
-         Panes move between these containers — they are never rebuilt. -->
-    <main id="board" data-layout="grid">
-      <div id="grid"></div>
-      <div id="rail"></div>
-      <div id="stage"></div>
-      <div id="empty"></div>
-    </main>
+
+    <!-- Ambient Floating Aurora Mesh (Layer 1) -->
+    <div id="bg-aurora" class="bg-aurora" aria-hidden="true">
+      <div class="aurora-blob aurora-blob-1"></div>
+      <div class="aurora-blob aurora-blob-2"></div>
+      <div class="aurora-blob aurora-blob-3"></div>
+      <div class="aurora-blob aurora-blob-4"></div>
+    </div>
+
+    <!-- V2 4-Zone Application Shell -->
+    <div id="attention-bar" class="attention-bar" title="Attention Queue"></div>
+    <div id="app-shell">
+      <aside id="sidebar"></aside>
+      <main id="main-workspace"></main>
+      <aside id="context-inspector"></aside>
+      <section id="terminal-drawer" class="terminal-drawer closed"></section>
+    </div>
 
     <!-- M4: one keystroke to everything. Recipes, panes, views, all findable
          by typing rather than by remembering another chord. -->
@@ -38,8 +34,7 @@
       </div>
     </div>
 
-    <!-- M4: the merged timeline — every session, in the order it happened.
-         "It places everything in order which claude CLI lacks." -->
+    <!-- M4: the merged timeline — every session, in the order it happened. -->
     <div id="timeline">
       <div class="tl-box">
         <div class="tl-head">
@@ -51,8 +46,8 @@
         <div id="tl-body"></div>
       </div>
     </div>
-    <!-- M5: one frame for changes and for search. A second bespoke overlay
-         would just be a third set of open/close bugs. -->
+
+    <!-- M5: one frame for changes and search. -->
     <div id="sheet">
       <div class="sh-box">
         <div class="sh-head">
@@ -68,3 +63,4 @@
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
+
